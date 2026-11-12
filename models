@@ -1,294 +1,1058 @@
 /* Pooh Bear: voxel models for the 3D guides. add(x,y,z,block,stepIndex,options) places one block; fillCounts() turns the models into per-step block counts. */
 function cottageModel(){
-  const V=[],add=(x,y,z,b,s)=>V.push({x,y,z,b,s});
-  for(let x=0;x<9;x++)for(let z=0;z<7;z++)add(x,0,z,'Cobblestone',0);
-  const win=(x,y,z)=>y>=2&&y<=3&&(((z===0||z===6)&&(x===2||x===6))||(z===3&&(x===0||x===8)));
-  for(let y=1;y<=4;y++)for(let x=0;x<9;x++)for(let z=0;z<7;z++){
-    if(x>0&&x<8&&z>0&&z<6)continue;
-    if((x===0||x===8)&&(z===0||z===6))add(x,y,z,'Oak Log',1);
-    else if(x===4&&z===0&&y<=2){}
-    else if(win(x,y,z))add(x,y,z,'Glass Pane',2);
-    else add(x,y,z,'Oak Planks',1);
-  }
-  add(3,3,1,'Lantern',2);add(5,3,1,'Lantern',2);
-  for(let x=0;x<9;x++){
-    [0,6].forEach(z=>add(x,5,z,'Oak Stairs',3));[1,5].forEach(z=>add(x,6,z,'Oak Stairs',3));[2,4].forEach(z=>add(x,7,z,'Oak Stairs',3));
-    add(x,8,3,'Oak Slab',3);
-  }
-  [0,8].forEach(x=>{for(let z=1;z<=5;z++)add(x,5,z,'Oak Planks',3);for(let z=2;z<=4;z++)add(x,6,z,'Oak Planks',3);add(x,7,3,'Oak Planks',3)});
-  [1,2].forEach(x=>[1,2].forEach(y=>add(x,y,5,'Bookshelf',4)));
-  [[1,3,1],[7,3,1],[1,3,5],[7,3,5],[4,3,1],[4,3,5]].forEach(p=>add(p[0],p[1],p[2],'Torch',4));
-  return V;
+  return mdl(add=>{
+    const SP='Spruce Planks',SS='Spruce Stairs',SSL='Spruce Slab',OL='Oak Log',WC='White Concrete',GP='Glass Pane',OP='Oak Planks',OS='Oak Stairs',OF='Oak Fence',SB='Stone Bricks',LN='Lantern';
+    const ST=['foundation','bars','floor','cheeks','stairs','pillars','walls','beams','windows','door','rail','porch','gables','eaves','roofMid','roofTop','ridge','chimney','lamps','flowers','barrels'];
+    const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+    const taken=new Set(),key=(x,y,z)=>x+','+y+','+z;
+    const A=(x,y,z,b,s,o)=>{const k=key(x,y,z);if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+    const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+    /* body x 1..12, z 1..9 (front is +z). main block z 1..7, wing x 8..12 z 8..9, porch x 1..7 z 8..9 */
+    const inMain=(x,z)=>x>=1&&x<=12&&z>=1&&z<=7, inWing=(x,z)=>x>=8&&x<=12&&z>=8&&z<=9;
+    const inU=(x,z)=>inMain(x,z)||inWing(x,z);
+    const isWall=(x,z)=>inU(x,z)&&[[1,0],[-1,0],[0,1],[0,-1]].some(d=>!inU(x+d[0],z+d[1]));
+    /* foundation: a ring 3 tall of mixed stone, with two barred cellar windows in the front */
+    const win=[3,4,6,7];
+    for(let x=1;x<=12;x++)for(let z=1;z<=9;z++){if(!(x===1||x===12||z===1||z===9))continue;
+      for(let y=0;y<=2;y++){
+        if(z===9&&y===1&&win.includes(x))continue;
+        const h=hh(x,y,z),b=h<52?SB:h<76?'Cobblestone':h<91?'Mossy Cobblestone':'Mossy Stone Bricks';
+        A(x,y,z,b,'foundation')}}
+    win.forEach(x=>A(x,1,9,OF,'bars'));
+    [4,7].forEach(x=>{A(x,0,8,SB,'bars');A(x,1,8,LN,'bars',{h:-1})});
+    /* floor */
+    for(let x=1;x<=12;x++)for(let z=1;z<=9;z++)A(x,3,z,(z>=8&&x<=7)?OP:SP,'floor');
+    /* entrance steps (x 9..10) with stone cheeks either side */
+    [[12,0],[11,1],[10,2]].forEach(r=>[9,10].forEach(x=>A(x,r[1],r[0],OS,'stairs',{f:[0,-1]})));
+    [[8],[11]].forEach(c=>{const x=c[0];A(x,0,12,SB,'cheeks');A(x,0,11,SB,'cheeks');A(x,1,11,SB,'cheeks');A(x,0,10,SB,'cheeks');A(x,1,10,SB,'cheeks');A(x,2,10,SB,'cheeks')});
+    [9,10].forEach(x=>{A(x,0,11,SB,'cheeks');A(x,0,10,SB,'cheeks');A(x,1,10,SB,'cheeks')});
+    A(11,2,11,'Flower Pot','cheeks');A(8,2,11,'Allium','cheeks');
+    /* pillars */
+    const pil=[[1,1],[4,1],[8,1],[12,1],[12,5],[12,9],[8,9],[8,8],[1,7],[4,7],[7,7],[1,4],[1,9],[7,9]];
+    const isP=(x,z)=>pil.some(p=>p[0]===x&&p[1]===z);
+    pil.forEach(p=>{for(let y=4;y<=6;y++)A(p[0],y,p[1],OL,'pillars')});
+    /* walls: plaster on layers y 4..5, except windows (y 5), niches, door */
+    const winC=new Set(['3,1','6,1','10,1','12,3','12,7','1,3','1,5','6,7']);
+    const niche=new Set(['9,9','11,9','5,7']);
+    const doorC=new Set(['10,9','2,7']);
+    const wallCells=[];for(let x=1;x<=12;x++)for(let z=1;z<=9;z++)if(isWall(x,z)&&!isP(x,z))wallCells.push([x,z]);
+    wallCells.forEach(w=>{const k=w[0]+','+w[1];
+      if(doorC.has(k))return;
+      A(w[0],4,w[1],WC,'walls');
+      if(winC.has(k)||niche.has(k))return;
+      A(w[0],5,w[1],WC,'walls')});
+    wallCells.forEach(w=>A(w[0],6,w[1],SP,'beams'));
+    winC.forEach(k=>{const p=k.split(',').map(Number);A(p[0],5,p[1],GP,'windows')});
+    doorC.forEach(k=>{const p=k.split(',').map(Number);A(p[0],4,p[1],OP,'door');A(p[0],5,p[1],OP,'door')});
+    niche.forEach(k=>{const p=k.split(',').map(Number);A(p[0],5,p[1],LN,'door',{h:-1})});
+    /* porch: railing along the front and left side, a bench, a barrel and a pot */
+    for(let x=2;x<=6;x++)A(x,4,9,OF,'rail');A(1,4,8,OF,'rail');
+    [2,3,4].forEach(x=>A(x,4,8,SSL,'porch'));A(7,4,8,'Barrel','porch');A(6,4,8,'Flower Pot','porch');A(5,4,8,'Pink Tulip','porch',{f:[0,-1]});
+    /* roof height map */
+    const Hm=z=>7+Math.min(z,10-z),Hc=(x,z)=>(x>=7&&x<=13&&z>=7)?7+Math.min(x-7,13-x):0;
+    const H=(x,z)=>Math.max(Hm(z),Hc(x,z));
+    const fromCross=(x,z)=>Hc(x,z)>Hm(z);
+    /* gable fill: plaster up to the roof on every wall cell */
+    for(let x=1;x<=12;x++)for(let z=1;z<=9;z++){if(!isWall(x,z)||isP(x,z)&&false)continue;
+      for(let y=7;y<=H(x,z)-1;y++){
+        if(x===10&&z===9&&y===8){A(x,y,z,GP,'gables');continue}
+        if(x===10&&z===9&&y===7){A(x,y,z,LN,'gables',{h:-1});continue}
+        A(x,y,z,WC,'gables')}}
+    /* roof: a stair on every column at the roof height, planks under it, ridge slabs on top */
+    const stepFor=h=>h<=8?'eaves':h<=10?'roofMid':h===11?'roofTop':'ridge';
+    for(let x=0;x<=13;x++)for(let z=0;z<=10;z++){
+      const h=H(x,z);let f;
+      const ridgeMain=(z===5),ridgeCross=(x===10&&z>=8&&fromCross(x,z));
+      const st=(ridgeMain||ridgeCross)?'ridge':stepFor(h);
+      if(h-1>=7&&!taken.has(key(x,h-1,z)))A(x,h-1,z,SP,st);
+      if(ridgeMain||ridgeCross)A(x,h,z,'Dark Oak Slab','ridge');
+      else{f=fromCross(x,z)?[x<10?1:-1,0]:[0,z<5?1:-1];A(x,h,z,(h===7||h===11)?'Dark Oak Stairs':SS,st,{f})}}
+    /* chimney on the back slope */
+    for(let y=12;y<=14;y++)A(9,y,4,'Bricks','chimney');A(9,15,4,'Barrel','chimney');
+    /* a hanging lantern under the porch roof */
+    A(4,7,8,LN,'lamps',{h:1});A(2,6,9,LN,'lamps',{h:1});A(6,6,9,LN,'lamps',{h:1});
+    /* flowers, bushes and barrels at the front and side */
+    A(3,0,10,'Pink Tulip','flowers',{f:[0,-1]});A(4,0,10,'Allium','flowers',{f:[0,-1]});A(6,0,10,'Pink Tulip','flowers',{f:[0,-1]});A(7,0,10,'Flowering Azalea Leaves','flowers');A(7,1,10,'Flowering Azalea Leaves','flowers');A(2,0,10,'Allium','flowers',{f:[0,-1]});
+    A(13,0,8,'Barrel','barrels');A(13,0,9,'Barrel','barrels');A(13,1,9,'Barrel','barrels');
+  })
 }
 function mdl(fn){const V=[];fn((x,y,z,b,s,o)=>{V.push(Object.assign({x,y,z,b,s},o))});return V}
 function farmModel(){return mdl(add=>{
-  add(5,0,5,'Water',0);
-  for(let x=1;x<=9;x++)for(let z=1;z<=9;z++)if(x!==5||z!==5){add(x,0,z,'Farmland',1);add(x,1,z,'Wheat',1)}
-  for(let x=0;x<=10;x++)for(let z=0;z<=10;z++)if(x===0||x===10||z===0||z===10)add(x,0,z,'Oak Log',2);
-  [[0,0],[10,0],[0,10],[10,10]].forEach(c=>add(c[0],1,c[1],'Torch',2));
-  for(let x=12;x<=15;x++)for(let z=3;z<=5;z++){
-    if(!(x===12||x===15||z===3||z===5))continue;
-    for(let y=0;y<=1;y++){if(x===12&&z===4)continue;add(x,y,z,'Hay Bale',3)}}
-  for(let x=11;x<=16;x++)for(let z=2;z<=6;z++)add(x,2,z,'Oak Planks',3);
+  const CB='Cobblestone',MC='Mossy Cobblestone',CSL='Cobblestone Slab',MSL='Mossy Cobblestone Slab',MST='Mossy Cobblestone Stairs',
+        SF='Spruce Fence',CD='Coarse Dirt',LN='Lantern',LV='Oak Leaves',OG='Oak Log',JL="Jack o'Lantern",SS='Spruce Stairs',SSL='Spruce Slab',SP='Spruce Planks';
+  const ST=['water','farmland','wheat','ringBase','ringBlocks','ringSlabs','corners','gatePosts','path','gate','rocks','lanterns',
+    'scarePost','scareArms','scareHead','scareHat','hedge','trunks','canopy','bushes','flowers','grass'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set();
+  const A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+  const cx=12,cz=12;
+  const P=(dx,y,dz,b,s,o)=>A(cx+dx,y,cz+dz,b,s,o);
+  const free=(dx,y,dz)=>!taken.has((cx+dx)+','+y+','+(cz+dz));
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const ab=Math.abs,sg=Math.sign;
+  /* the wheat field is a 9x9 square with its four corners cut off; the ring is the one-block belt round it */
+  const inF=(dx,dz)=>ab(dx)<=4&&ab(dz)<=4&&ab(dx)+ab(dz)<=7;
+  const inF1=(dx,dz)=>ab(dx)<=5&&ab(dz)<=5&&ab(dx)+ab(dz)<=9;
+  const inRing=(dx,dz)=>inF1(dx,dz)&&!inF(dx,dz);
+  const isGap=(dx,dz)=>dz===5&&dx>=-2&&dx<=0;
+  const isCenterCorner=(dx,dz)=>ab(dx)===4&&ab(dz)===4;
+  const isFlank=(dx,dz)=>(ab(dx)===5&&ab(dz)===4)||(ab(dx)===4&&ab(dz)===5);
+  const isCorner=(dx,dz)=>isCenterCorner(dx,dz)||isFlank(dx,dz);
+  const isPost=(dx,dz)=>dz===5&&(dx===-3||dx===1);
+  const scare=[0,-3];
+  const isScare=(dx,dz)=>dx===scare[0]&&dz===scare[1];
+  const isArm=(dx,dz)=>dz===scare[1]&&ab(dx)===1;
+  /* 0: water in the middle */
+  P(0,0,0,'Water','water');
+  /* 1-2: farmland, then wheat on every farmland block except the scarecrow's three spots */
+  for(let dz=-4;dz<=4;dz++)for(let dx=-4;dx<=4;dx++){if(!inF(dx,dz)||(dx===0&&dz===0)||isScare(dx,dz))continue;P(dx,0,dz,'Farmland','farmland')}
+  for(let dz=-4;dz<=4;dz++)for(let dx=-4;dx<=4;dx++){if(!inF(dx,dz)||(dx===0&&dz===0)||isScare(dx,dz)||isArm(dx,dz))continue;P(dx,1,dz,'Wheat','wheat')}
+  /* 3: ring base on layer 1, a mix of cobblestone and mossy cobblestone */
+  const baseOf=(dx,dz)=>hh(dx,0,dz)<48?MC:CB;
+  for(let dz=-5;dz<=5;dz++)for(let dx=-5;dx<=5;dx++){if(!inRing(dx,dz)||isGap(dx,dz))continue;P(dx,0,dz,baseOf(dx,dz),'ringBase')}
+  /* side cells run -3..3 along each side. back/right: full on even places; left: on odd places; front: only the two end blocks (gate posts are separate) */
+  const sideFull=(dx,dz)=>{
+    if(dz===-5)return dx%2===0;
+    if(dx===5)return dz%2===0;
+    if(dx===-5)return ab(dz)%2===1;
+    if(dz===5)return dx===3;
+    return false};
+  const fullOf=(dx,dz)=>hh(dx,1,dz)<50?MC:CB;
+  const slabOf=(dx,dz)=>hh(dx,2,dz)<50?MSL:CSL;
+  for(let dz=-5;dz<=5;dz++)for(let dx=-5;dx<=5;dx++){
+    if(!inRing(dx,dz)||isGap(dx,dz)||isPost(dx,dz))continue;
+    if(isCorner(dx,dz)||sideFull(dx,dz))P(dx,1,dz,fullOf(dx,dz),'ringBlocks');
+    else P(dx,1,dz,slabOf(dx,dz),'ringSlabs')}
+  /* 6: corner clusters, the middle block one higher, a stair on each flank leaning against it */
+  [-1,1].forEach(sx=>[-1,1].forEach(sz=>{
+    P(4*sx,2,4*sz,MC,'corners');
+    P(5*sx,2,4*sz,MST,'corners',{f:[-sx,0]});
+    P(4*sx,2,5*sz,MST,'corners',{f:[0,-sz]})}));
+  /* 7: gate posts, two blocks on top of the ring base */
+  [-3,1].forEach(dx=>{P(dx,1,5,fullOf(dx,5),'gatePosts');P(dx,2,5,hh(dx,3,5)<50?MC:CB,'gatePosts')});
+  /* 8: coarse dirt path through the gap and out */
+  for(let dx=-2;dx<=0;dx++)P(dx,0,5,CD,'path');
+  for(let dx=-3;dx<=1;dx++)P(dx,0,6,CD,'path');
+  for(let dx=-2;dx<=0;dx++)P(dx,0,7,CD,'path');
+  /* 9: spruce fence across the gap */
+  for(let dx=-2;dx<=0;dx++)P(dx,1,5,SF,'gate');
+  /* 10: scattered mossy boulders outside the ring */
+  const rocks=[[6,-2,2],[6,-3,1],[6,3,1],[-6,-1,1],[-6,0,2],[-6,1,1],[2,-6,1],[-3,-6,2],[-4,-6,1],[5,6,1],[-5,6,1],[3,7,1]];
+  rocks.forEach(r=>{P(r[0],0,r[1],MC,'rocks');if(r[2]===2)P(r[0],1,r[1],MSL,'rocks')});
+  /* 11: lanterns: corner peaks, gate posts and two side blocks */
+  [-1,1].forEach(sx=>[-1,1].forEach(sz=>P(4*sx,3,4*sz,LN,'lanterns',{h:-1})));
+  [-3,1].forEach(dx=>P(dx,3,5,LN,'lanterns',{h:-1}));
+  [[0,-5],[5,0]].forEach(p=>P(p[0],2,p[1],LN,'lanterns',{h:-1}));
+  /* 12-15: the scarecrow, in the second row from the back */
+  P(scare[0],0,scare[1],CD,'scarePost');
+  P(scare[0],1,scare[1],SF,'scarePost');
+  P(scare[0],2,scare[1],CB,'scarePost');
+  [-1,1].forEach(sx=>{P(sx,1,scare[1],SF,'scareArms');P(sx,2,scare[1],SF,'scareArms')});
+  P(scare[0],3,scare[1],JL,'scareHead');
+  P(0,4,scare[1],SP,'scareHat');
+  P(0,5,scare[1],SSL,'scareHat');
+  [-1,1].forEach(s=>{P(s,4,scare[1],SS,'scareHat',{f:[-s,0]});P(2*s,4,scare[1],SSL,'scareHat')});
+  /* 16-18: hedge across the back, two oak trunks and their crowns */
+  const trunks=[[-6,-8],[6,-8]];
+  const isTrunk=(dx,dz)=>trunks.some(t=>t[0]===dx&&t[1]===dz);
+  for(let dz=-8;dz<=-7;dz++)for(let dx=-7;dx<=7;dx++){
+    if(isTrunk(dx,dz))continue;
+    const edge=ab(dx)>=6;
+    const h=edge?1+(hh(dx,5,dz)<45?1:0):2+(hh(dx,6,dz)<50?1:0);
+    for(let y=0;y<h;y++)P(dx,y,dz,LV,'hedge')}
+  trunks.forEach(t=>{for(let y=0;y<=4;y++)P(t[0],y,t[1],OG,'trunks')});
+  trunks.forEach(t=>{
+    for(let y=3;y<=5;y++){
+      for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){
+        const inside=y<=4?!(ab(a)===2&&ab(b)===2):(ab(a)<=1&&ab(b)<=1);
+        if(!inside)continue;
+        if(a===0&&b===0&&y<=4)continue;
+        if(free(t[0]+a,y,t[1]+b))P(t[0]+a,y,t[1]+b,LV,'canopy')}}});
+  /* 19: two leafy bushes at the sides */
+  [[-8,-3,3],[7,-3,3]].forEach(bs=>{
+    for(let i=0;i<2;i++)for(let j=0;j<bs[2];j++){
+      const dx=bs[0]+i,dz=bs[1]+j;
+      P(dx,0,dz,LV,'bushes');
+      if(hh(dx,7,dz)<62)P(dx,1,dz,LV,'bushes')}});
+  /* 20-21: flowers and short grass on the loose ground */
+  const fl=['Poppy','Dandelion','Oxeye Daisy','Allium','Pink Tulip'];
+  const flPick=h=>h<30?fl[0]:h<55?fl[1]:h<75?fl[2]:h<85?fl[3]:fl[4];
+  const cand=[];
+  for(let dz=-6;dz<=7;dz++)for(let dx=-8;dx<=8;dx++){
+    if(!free(dx,0,dz))continue;
+    if(ab(dx)<=6&&ab(dz)<=6&&inF1(dx,dz))continue;
+    if(dz>=5&&dx>=-4&&dx<=2)continue;
+    cand.push([dx,dz])}
+  cand.forEach(c=>{const h=hh(c[0]*3+11,9,c[1]*5+7);if(h<34)P(c[0],0,c[1],flPick(hh(c[0],10,c[1])),'flowers')});
+  cand.forEach(c=>{if(!free(c[0],0,c[1]))return;const h=hh(c[0]*3+11,9,c[1]*5+7);if(h>=34&&h<50)P(c[0],0,c[1],"Short Grass",'grass')});
 })}
 function towerModel(){return mdl(add=>{
-  for(let x=0;x<=8;x++)for(let z=0;z<=8;z++){const e=x===0||x===8||z===0||z===8;add(x,0,z,e?'Stone Bricks':'Cobblestone',0)}
-  for(let y=1;y<=14;y++)for(let x=1;x<=7;x++)for(let z=1;z<=7;z++){
-    if(x>1&&x<7&&z>1&&z<7)continue;
-    if(x===4&&z===1&&y<=2)continue;
-    add(x,y,z,y%4===0?'Cobblestone':'Stone Bricks',1)}
-  for(let x=0;x<=8;x++)for(let z=0;z<=8;z++){
-    add(x,15,z,'Spruce Planks',2);
-    if((x===0||x===8||z===0||z===8)&&(x+z)%2===0)add(x,16,z,'Stone Bricks',2)}
-  [5,10].forEach(y=>{add(0,y,4,'Torch',3,{f:[1,0]});add(8,y,4,'Torch',3,{f:[-1,0]});add(4,y,0,'Torch',3,{f:[0,1]});add(4,y,8,'Torch',3,{f:[0,-1]})});
-  [[0,0],[8,0],[0,8],[8,8]].forEach(c=>add(c[0],17,c[1],'Torch',3));
+  const SB='Stone Bricks',MSB='Mossy Stone Bricks',CSB='Cracked Stone Bricks',SBS='Stone Brick Stairs',CB='Cobblestone',
+        GB='Grass Block',CD='Coarse Dirt',SS='Smooth Sandstone',SSS='Smooth Sandstone Stairs',SSL='Smooth Sandstone Slab',GP='Glass Pane',
+        SPL='Spruce Planks',LN='Lantern',TC='Torch',OG='Oak Log',LV='Oak Leaves';
+  const ST=['terraceA','terraceB','terraceC','plinth','plate','piers','stairs','sandstone','ruins','foreland',
+    'shaft1','wall2','panes1','shaft3','wall4','panes2','shaft5','door','corbels','deck','merlons','torches','lanterns','trunks','crowns','tufts'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set();
+  const A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+  const cx=14,cz=12;
+  const P=(dx,y,dz,b,s,o)=>A(cx+dx,y,cz+dz,b,s,o);
+  const free=(dx,y,dz)=>!taken.has((cx+dx)+','+y+','+(cz+dz));
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const ab=Math.abs,sg=Math.sign;
+  const brick=(x,y,z)=>{const h=hh(x,y,z);return h<87?SB:h<95?MSB:CSB};
+  const ring=h=>{const o=[];for(let dx=-h;dx<=h;dx++)for(let dz=-h;dz<=h;dz++)if(Math.max(ab(dx),ab(dz))===h)o.push([dx,dz]);return o};
+  const towardMid=(h,dx,dz)=>[dx===h?-1:dx===-h?1:0,dz===h?-1:dz===-h?1:0];
+  /* levels: ground y=0; plinth walls y=0..5; ledge y=6; tower shaft y=7..19; corbels y=19; deck y=20; merlons y=21..22 */
+  /* 0-2: hillside round the back and sides, three terraces stepping down; grass on top, coarse dirt below */
+  const tops=[];
+  for(let dz=-8;dz<=-2;dz++)for(let dx=-8;dx<=8;dx++){
+    const e=Math.max(ab(dx)-5,ab(dz)-5);
+    if(e<1||e>3)continue;
+    const base=e===1?4:e===2?2:0;
+    const top=Math.max(0,base-(e<3&&hh(dx,3,dz)<30?1:0));
+    const step=e===1?'terraceA':e===2?'terraceB':'terraceC';
+    for(let y=0;y<top;y++)P(dx,y,dz,CD,step);
+    P(dx,top,dz,GB,step);
+    tops.push([dx,top,dz])}
+  /* 3: plinth walls, 6 tall, a ring 11 x 11 */
+  ring(5).forEach(r=>{for(let y=0;y<=5;y++)P(r[0],y,r[1],brick(r[0],y,r[1]),'plinth')});
+  /* 4: ledge and floor on top of the plinth */
+  for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++)P(dx,6,dz,(ab(dx)<=4&&ab(dz)<=4)?CB:(hh(dx,6,dz)<80?SB:MSB),'plate');
+  /* 5: four piers on the front, topped with stairs */
+  [-5,-3,3,5].forEach(dx=>{for(let y=0;y<=4;y++)P(dx,y,6,brick(dx,y,6),'piers');P(dx,5,6,SBS,'piers',{f:[0,-1]})});
+  /* 6: front stairway, 3 wide, 6 steps, with solid bricks beneath */
+  for(let k=0;k<=5;k++)for(let dx=-1;dx<=1;dx++){
+    for(let y=0;y<k;y++)P(dx,y,11-k,SB,'stairs');
+    P(dx,k,11-k,SBS,'stairs',{f:[0,-1]})}
+  /* 7: sandstone steps climbing the right side of the plinth */
+  const sand=[[6,5,0,4],[7,4,0,3],[8,3,1,3],[9,2,1,3],[10,1,2,3]];
+  sand.forEach(c=>{const x=c[0],h=c[1];for(let z=c[2];z<=c[3];z++){
+    for(let y=0;y<h-1;y++)P(x,y,z,SS,'sandstone');
+    if(z===c[2]||z===c[3]||hh(x,9,z)<35)P(x,h-1,z,SSS,'sandstone',{f:[-1,0]});else P(x,h-1,z,SS,'sandstone')}});
+  P(6,5,2,SSL,'sandstone');P(7,4,2,SSL,'sandstone');
+  /* 8: ruined curtain wall running out from the left of the plinth, two blocks thick */
+  const wallH={'-6':6,'-7':5,'-8':5,'-9':4,'-10':3,'-11':2};
+  Object.keys(wallH).forEach(k=>{const x=+k,h=wallH[k];for(let z=3;z<=4;z++){
+    for(let y=0;y<h;y++)P(x,y,z,brick(x,y,z),'ruins');
+    if(x>=-8&&(x+z)%2===0)P(x,h,z,brick(x,h,z),'ruins')}});
+  [[-9,4,3],[-10,3,4],[-11,2,3]].forEach(c=>{if(free(c[0],c[1],c[2]))P(c[0],c[1],c[2],SBS,'ruins',{f:[1,0]})});
+  /* 8b: grassy terraces in front of the sandstone steps and the ruined wall */
+  const fore=(x0,x1,z0,z1,sx,hgt)=>{for(let dz=z0;dz<=z1;dz++)for(let dx=x0;dx<=x1;dx++){
+    const d=Math.max(sx>0?dx-x0:x1-dx,dz-z0);let top=hgt-d;if(top<0)continue;
+    if(top>=2&&hh(dx,4,dz)<25)top--;
+    for(let y=0;y<top;y++)P(dx,y,dz,CD,'foreland');
+    P(dx,top,dz,GB,'foreland');tops.push([dx,top,dz])}};
+  fore(6,10,5,9,1,4);fore(-10,-6,5,8,-1,3);
+  /* 9-15: the shaft, a 9 x 9 ring of bricks from y=7 to y=18, with window slits on two floors */
+  const isDoor=(dx,dz,y)=>dz===5-1&&dx===0&&y<=8;
+  const isWin=(dx,dz,y)=>{const rowA=y===10||y===11,rowB=y===15||y===16;if(!(rowA||rowB))return false;
+    return (ab(dz)===4&&ab(dx)===2)||(ab(dx)===4&&ab(dz)===2)};
+  const wallRows=(y0,y1,step,paneStep)=>{
+    for(let y=y0;y<=y1;y++)ring(4).forEach(r=>{
+      if(isDoor(r[0],r[1],y)&&r[1]===4)return;
+      if(isWin(r[0],r[1],y)){if(paneStep)P(r[0],y,r[1],GP,paneStep);return}
+      if(!paneStep)P(r[0],y,r[1],brick(r[0],y,r[1]),step)})};
+  wallRows(7,9,'shaft1');
+  wallRows(10,11,'wall2');wallRows(10,11,null,'panes1');
+  wallRows(12,14,'shaft3');
+  wallRows(15,16,'wall4');wallRows(15,16,null,'panes2');
+  wallRows(17,18,'shaft5');
+  /* 16: spruce door, 2 tall */
+  [7,8].forEach(y=>P(0,y,4,SPL,'door'));
+  /* 17: corbels, one wall course then a ring of stairs sticking out all round */
+  ring(4).forEach(r=>P(r[0],19,r[1],brick(r[0],19,r[1]),'corbels'));
+  ring(5).forEach(r=>P(r[0],19,r[1],SBS,'corbels',{f:towardMid(5,r[0],r[1])}));
+  /* 18: deck: stone brick edge, spruce planks inside */
+  ring(5).forEach(r=>P(r[0],20,r[1],SB,'deck'));
+  for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++)P(dx,20,dz,SPL,'deck');
+  /* 19: merlons, two tall, two wide with a one-block gap */
+  ring(5).forEach(r=>{const i=(ab(r[1])===5?r[0]:r[1])+5;if(i%3===2)return;for(let y=21;y<=22;y++)P(r[0],y,r[1],brick(r[0],y,r[1]),'merlons')});
+  /* 20-21: torches on the corner merlons, lanterns on the ledge */
+  [[-5,-5],[5,-5],[-5,5],[5,5]].forEach(c=>P(c[0],23,c[1],TC,'torches'));
+  [[-5,-5],[5,-5],[-5,5],[5,5],[-1,5],[1,5]].forEach(c=>P(c[0],7,c[1],LN,'lanterns',{h:-1}));
+  /* 22-23: two oak trees on the back terraces */
+  const trees=[[8,-5,6],[-8,-5,5]];
+  trees.forEach(t=>{for(let y=1;y<=t[2];y++)P(t[0],y,t[1],OG,'trunks')});
+  trees.forEach(t=>{const yb=t[2]-1;
+    for(let y=yb;y<=yb+3;y++)for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){
+      const inside=y<=yb+1?!(ab(a)===2&&ab(b)===2):y===yb+2?(ab(a)<=1&&ab(b)<=1):(ab(a)+ab(b)<=1);
+      if(!inside)continue;
+      if(free(t[0]+a,y,t[1]+b))P(t[0]+a,y,t[1]+b,LV,'crowns')}});
+  /* 24: tufts of grass and a few flowers on the terrace tops */
+  tops.forEach(c=>{const h=hh(c[0]*3+5,8,c[2]*7+1);
+    if(!free(c[0],c[1]+1,c[2]))return;
+    if(h<34)P(c[0],c[1]+1,c[2],'Short Grass','tufts');
+    else if(h<42)P(c[0],c[1]+1,c[2],h<38?'Poppy':'Dandelion','tufts')});
 })}
-function treeModel(){return mdl(add0=>{
-  const used=new Set(),A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(used.has(k))return;used.add(k);add0(x,y,z,b,s,o)};
-  const oct=(x,z,r,c)=>Math.abs(x)<=r&&Math.abs(z)<=r&&Math.abs(x)+Math.abs(z)<=c;
-  const edge=(f,x,z)=>f(x,z)&&!(f(x+1,z)&&f(x-1,z)&&f(x,z+1)&&f(x,z-1)&&f(x+1,z+1)&&f(x+1,z-1)&&f(x-1,z+1)&&f(x-1,z-1));
-  const inT=(x,z)=>Math.abs(x)<=1&&Math.abs(z)<=1;
-  const tw=(x,z)=>Math.abs(x)>=Math.abs(z)?[-Math.sign(x),0]:[0,-Math.sign(z)];
-  const grid=(R,fn)=>{for(let x=-R;x<=R;x++)for(let z=-R;z<=R;z++)fn(x,z)};
-  /* one stepped layer: stairs round the rim (high side inward), solid fill inside */
-  const lay=(f,y,s,st,fl,ox,oz)=>grid(9,(a,c)=>{
-    if(!f(a,c))return;const x=a+ox,z=c+oz;
-    if(edge(f,a,c))A(x,y,z,st,s,{f:tw(a,c)});
-    else if(!(ox===0&&y<=27&&inT(a,c)))A(x,y,z,fl,s)});
-  /* 0: the great trunk, 3x3 dark oak */
-  for(let y=0;y<=16;y++)grid(1,(x,z)=>A(x,y,z,'Dark Oak Log',0));
-  /* 1: spiral stairs round the trunk, one block up per cell */
-  const ring=[[-1,-2],[0,-2],[1,-2],[2,-2],[2,-1],[2,0],[2,1],[2,2],[1,2],[0,2],[-1,2],[-2,2],[-2,1],[-2,0],[-2,-1],[-2,-2]];
-  for(let i=0;i<=14;i++){const c=ring[i],n=ring[i+1];A(c[0],i,c[1],'Spruce Stairs',1,{f:[n[0]-c[0],n[1]-c[1]]})}
-  [3,7,11].forEach(i=>{for(let y=0;y<i;y++)A(ring[i][0],y,ring[i][1],'Spruce Fence',1)});
-  /* 2: octagonal deck, stilts, railing */
-  const dk=(x,z)=>oct(x,z,6,9),holes=new Set(['-2,0','-2,-1']);
-  [1,-1].forEach(a=>[1,-1].forEach(c=>{for(let y=0;y<=14;y++)A(4*a,y,4*c,'Dark Oak Log',2)}));
-  grid(6,(x,z)=>{
-    if(!dk(x,z)||inT(x,z)||holes.has(x+','+z))return;
-    if(x===-2&&z===-2){A(x,15,z,'Spruce Slab',2);return}
-    A(x,15,z,edge(dk,x,z)?'Dark Oak Planks':'Spruce Planks',2)});
-  grid(6,(x,z)=>{if(edge(dk,x,z)&&!(x===6&&Math.abs(z)<=2))A(x,16,z,'Spruce Fence',2)});
-  /* 3: trunk rises through an eight-sided cabin */
-  for(let y=17;y<=27;y++)grid(1,(x,z)=>A(x,y,z,'Dark Oak Log',3));
-  const cb=(x,z)=>oct(x,z,4,6);
-  grid(4,(x,z)=>{
-    if(!edge(cb,x,z))return;const k=(Math.abs(x)+Math.abs(z)+2)%4;
-    for(let y=16;y<=19;y++){
-      if(x===4&&z===0&&y<=17)continue;
-      if(k===0)A(x,y,z,'Dark Oak Log',3);
-      else if(y===19)A(x,y,z,'Dark Oak Planks',3);
-      else if(y===16)A(x,y,z,'Mossy Stone Bricks',3);
-      else A(x,y,z,k===3&&(Math.abs(x)===4||Math.abs(z)===4)?'Glass Pane':'Birch Planks',3)}});
-  /* 4: stepped roof with an overhang, moss top and azalea tufts */
-  lay((x,z)=>oct(x,z,5,8),20,4,'Spruce Stairs','Dark Oak Planks',0,0);
-  lay(cb,21,4,'Spruce Stairs','Dark Oak Planks',0,0);
-  lay((x,z)=>oct(x,z,3,5),22,4,'Spruce Stairs','Dark Oak Planks',0,0);
-  grid(2,(x,z)=>{if(oct(x,z,2,3)&&!inT(x,z))A(x,23,z,'Moss Block',4)});
-  [[2,0],[-2,0],[0,2],[0,-2]].forEach(c=>A(c[0],24,c[1],'Flowering Azalea Leaves',4));
-  /* 5: branches and eight leaf clouds with glowing shroomlight underneath */
-  [1,-1].forEach(s=>{
-    for(let t=2;t<=6;t++){A(s*t,25,0,'Dark Oak Wood',5);A(0,25,s*t,'Dark Oak Wood',5)}
-    for(let t=1;t<=4;t++)[1,-1].forEach(g=>{A(s*6,25,g*t,'Dark Oak Wood',5);A(g*t,25,s*6,'Dark Oak Wood',5)})});
-  let sd=7;const rn=()=>{sd=(sd*9301+49297)%233280;return sd/233280};
-  const cloud=(cx,cy,cz,an)=>{
-    const C=new Map();
-    for(let x=cx-3;x<=cx+3;x++)for(let y=cy-2;y<=cy+2;y++)for(let z=cz-3;z<=cz+3;z++){
-      const d=((x-cx)*(x-cx)+(z-cz)*(z-cz))/7.84+(y-cy)*(y-cy)/5.29;
-      if(d>1||(d>.68&&rn()<.3))continue;
-      const h=(((x*7+y*13+z*3)%8)+8)%8;
-      let b='Oak Leaves';
-      if(y===cy-2&&((x*3+z*5)&3)===0)b='Shroomlight';
-      else if(y===cy-1&&d>.55&&((x*5+z*3)&7)===0)b='Shroomlight';
-      else if(h===0)b='Flowering Azalea Leaves';
-      C.set(x+','+y+','+z,[x,y,z,b])}
-    const ak=an.join(',');if(!C.has(ak))C.set(ak,[an[0],an[1],an[2],'Oak Leaves']);
-    const seen=new Set([ak]),q=[C.get(ak)];
-    while(q.length){const v=q.pop();A(v[0],v[1],v[2],v[3],5);
-      [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(d=>{const k=(v[0]+d[0])+','+(v[1]+d[1])+','+(v[2]+d[2]);if(C.has(k)&&!seen.has(k)){seen.add(k);q.push(C.get(k))}})}};
-  [1,-1].forEach(s=>{cloud(7*s,26,0,[7*s,25,0]);cloud(0,26,7*s,[0,25,7*s]);[1,-1].forEach(t=>cloud(6*s,26,6*t,[6*s,25,5*t]))});
-  /* 6: crow's nest with a copper roof and lightning rod */
-  const ns=(x,z)=>oct(x,z,3,5);
-  grid(3,(x,z)=>{if(ns(x,z))A(x,28,z,'Spruce Planks',6)});
-  [1,-1].forEach(a=>[1,-1].forEach(c=>{for(let y=29;y<=32;y++)A(2*a,y,2*c,'Dark Oak Log',6)}));
-  grid(3,(x,z)=>{if(edge(ns,x,z))A(x,29,z,'Spruce Fence',6)});
-  lay(ns,33,6,'Weathered Copper Stairs','Weathered Copper',0,0);
-  lay((x,z)=>oct(x,z,2,3),34,6,'Oxidized Copper Stairs','Oxidized Copper',0,0);
-  lay((x,z)=>Math.abs(x)<=1&&Math.abs(z)<=1,35,6,'Oxidized Copper Stairs','Oxidized Copper',0,0);
-  A(0,36,0,'Lightning Rod',6);
-  /* 7: bridge and satellite pavilion on its own trunk */
-  for(let x=7;x<=12;x++)for(let z=-2;z<=2;z++){A(x,15,z,'Spruce Planks',7);if(Math.abs(z)===2)A(x,16,z,'Spruce Fence',7)}
-  const pv=(a,c)=>Math.abs(a)<=2&&Math.abs(c)<=2;
-  for(let y=0;y<=14;y++)A(15,y,0,'Dark Oak Wood',7);
-  grid(2,(a,c)=>A(15+a,15,c,edge(pv,a,c)?'Dark Oak Planks':'Spruce Planks',7));
-  [[-2,-2],[-2,2],[2,-2],[2,2]].forEach(p=>{for(let y=16;y<=19;y++)A(15+p[0],y,p[1],'Dark Oak Log',7)});
-  grid(2,(a,c)=>{if(edge(pv,a,c)&&!(a===-2&&Math.abs(c)<=1))A(15+a,16,c,'Spruce Fence',7)});
-  lay((a,c)=>oct(a,c,3,5),20,7,'Spruce Stairs','Dark Oak Planks',15,0);
-  lay((a,c)=>oct(a,c,2,3),21,7,'Spruce Stairs','Dark Oak Planks',15,0);
-  grid(1,(a,c)=>{if(oct(a,c,1,2))A(15+a,22,c,'Moss Block',7)});
-  A(15,23,0,'Flowering Azalea Leaves',7);
-  /* 8: lights, furniture, ground cover */
-  [[5,0],[-5,0],[0,5],[0,-5],[4,4],[4,-4],[-4,4],[-4,-4],[15,0]].forEach(p=>{A(p[0],19,p[1],'Chain',8);A(p[0],18,p[1],'Lantern',8,{h:1})});
-  A(0,32,0,'Lantern',8,{h:1});
-  [[6,3],[6,-3],[7,2],[7,-2],[12,2],[12,-2]].forEach(p=>A(p[0],17,p[1],'Lantern',8,{h:-1}));
-  [[-3,16,0],[-3,16,1],[-3,17,0],[-3,17,1]].forEach(p=>A(p[0],p[1],p[2],'Bookshelf',8));
-  [1,-1].forEach(z=>A(3,16,z,'Barrel',8));
-  grid(5,(x,z)=>{const m=Math.max(Math.abs(x),Math.abs(z));if(m>=3&&Math.abs(x)+Math.abs(z)<=7)A(x,0,z,'Moss Block',8)});
-  grid(2,(a,c)=>{if(!(a===0&&c===0)&&Math.abs(a)+Math.abs(c)<=3)A(15+a,0,c,'Moss Block',8)});
-  [[-7,0,4],[-6,0,4],[-7,0,5],[-6,1,4],[6,0,-6],[7,0,-6],[6,0,-7],[6,1,-6],[11,0,3],[12,0,3],[11,1,3]].forEach(p=>A(p[0],p[1],p[2],'Mossy Cobblestone',8));
-  [[-7,0,-3],[-7,1,-3],[-6,0,-3],[3,0,7],[3,1,7],[4,0,7],[-3,0,-7],[8,0,-4],[8,1,-4],[17,0,3]].forEach(p=>A(p[0],p[1],p[2],'Flowering Azalea Leaves',8));
+function treeModel(){return mdl(add=>{
+  const OG='Oak Log',OP='Oak Planks',OS='Oak Slab',OF='Oak Fence',LV='Oak Leaves',GP='Glass Pane',SP='Spruce Planks',LN='Lantern',SSL='Smooth Sandstone Slab',W='Water';
+  const ST=['stream','stones','flare','trunkLow','plankWall','door','trunkMid','platform','trunkHigh','walls','windows','rail','roofA','roofB',
+    'limbs','canopyLow','canopyMid','canopyHigh','sideLeaves','swingTop','swingSeat','bamboo','flowers','mushrooms','grass'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set(),logs=[];
+  const cx=17,cz=15;
+  const A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);if(b===OG)logs.push([x-cx,y,z-cz]);add(x,y,z,b,S(s),o)};
+  const P=(dx,y,dz,b,s,o)=>A(cx+dx,y,cz+dz,b,s,o);
+  const free=(dx,y,dz)=>!taken.has((cx+dx)+','+y+','+(cz+dz));
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const ab=Math.abs;
+  const FLAT={f:[0,0]};
+  const inTrunk3=(x,z)=>ab(x)<=1&&ab(z)<=1;
+  const inCore=(x,z)=>ab(x)<=2&&ab(z)<=2;
+  /* 0: a winding stream across the front, level with the grass; 1: sandstone path over it */
+  const path=[];for(let z=5;z<=12;z++)for(let x=-1;x<=0;x++){const cross=z>=8&&z<=9;if(!cross&&hh(x,2,z)<22)continue;path.push([x,z])}
+  const isPath=(x,z)=>path.some(s=>s[0]===x&&s[1]===z);
+  const zc=x=>8+Math.round(1.5*Math.sin(x/3.4));
+  for(let x=-13;x<=13;x++)for(let z=zc(x);z<=zc(x)+1;z++){if(isPath(x,z))continue;P(x,0,z,W,'stream',FLAT)}
+  path.forEach(s=>P(s[0],0,s[1],SSL,'stones',FLAT));
+  /* 2: root flare: a ring of oak columns of different heights round the trunk */
+  const inRing=(x,z)=>ab(x)<=4&&ab(z)<=3&&ab(x)+ab(z)<=5&&!inCore(x,z);
+  const ringH=(x,z)=>{
+    if(z===3)return 1;
+    if(x===-3)return ab(z)<=1?5:3;
+    if(x===-4)return ab(z)===0?3:2;
+    if(x===3)return 2;
+    if(x===4)return 1;
+    if(z===-3)return 2+hh(x,3,z)%2;
+    return 1+hh(x,4,z)%2};
+  const ringCells=[];
+  for(let x=-4;x<=4;x++)for(let z=-3;z<=3;z++){if(!inRing(x,z))continue;const h=ringH(x,z);ringCells.push([x,z,h]);for(let y=0;y<h;y++)P(x,y,z,OG,'flare')}
+  /* 3: lower trunk, 5 x 5 (the door cells are left for the next steps) */
+  const isDoorCell=(x,y,z)=>x===-1&&z===2&&(y===1||y===2);
+  for(let y=0;y<=5;y++)for(let x=-2;x<=2;x++)for(let z=-2;z<=2;z++){if(isDoorCell(x,y,z))continue;P(x,y,z,OG,'trunkLow')}
+  /* 4: plank strip up the right side of the trunk, with two windows and slab sills */
+  const isPane=(y,z)=>z===0&&(y===4||y===5||y===7||y===8);
+  for(let y=2;y<=11;y++)for(let z=-1;z<=1;z++)P(3,y,z,isPane(y,z)?GP:OP,'plankWall');
+  [4,7].forEach(y=>P(4,y,0,OS,'plankWall'));
+  /* 5: door at the foot of the trunk with fence posts and a slab awning */
+  [1,2].forEach(y=>P(-1,y,2,SP,'door'));
+  [-2,0].forEach(x=>[1,2].forEach(y=>P(x,y,3,OF,'door')));
+  for(let x=-3;x<=1;x++)for(let z=3;z<=4;z++)P(x,3,z,OS,'door');
+  /* 6: upper trunk: the corners are cut off so it narrows */
+  for(let y=6;y<=11;y++)for(let x=-2;x<=2;x++)for(let z=-2;z<=2;z++){if(ab(x)===2&&ab(z)===2)continue;P(x,y,z,OG,'trunkMid')}
+  /* 7: platform */
+  for(let x=-7;x<=3;x++)for(let z=-3;z<=3;z++){if(inTrunk3(x,z))continue;P(x,12,z,OP,'platform')}
+  /* 8: trunk through the cabin */
+  for(let y=12;y<=20;y++)for(let x=-1;x<=1;x++)for(let z=-1;z<=1;z++)P(x,y,z,OG,'trunkHigh');
+  /* 9-10: cabin walls, a doorway to the balcony, glass panes and two hanging lanterns */
+  const onWall=(x,z)=>ab(x)<=3&&ab(z)<=3&&(ab(x)===3||ab(z)===3);
+  const isWin=(x,y,z)=>(y===14||y===15)&&((z===3&&ab(x)<=1)||(x===3&&ab(z)<=1));
+  for(let y=13;y<=16;y++)for(let x=-3;x<=3;x++)for(let z=-3;z<=3;z++){
+    if(!onWall(x,z))continue;
+    if(x===-3&&z===0&&y<=14)continue;
+    if(isWin(x,y,z))continue;
+    P(x,y,z,OP,'walls')}
+  [14,15].forEach(y=>{for(let x=-1;x<=1;x++)P(x,y,3,GP,'windows');for(let z=-1;z<=1;z++)P(3,y,z,GP,'windows')});
+  /* 11: fence all round the platform */
+  for(let z=-3;z<=3;z++)P(-7,13,z,OF,'rail');
+  for(let x=-6;x<=-4;x++)[-3,3].forEach(z=>P(x,13,z,OF,'rail'));
+  [-3,0,3].forEach(z=>[14,15,16].forEach(y=>P(-7,y,z,OF,'rail')));
+  /* 12-13: roof: plank deck, slab overhang all round and a slab cap */
+  for(let x=-7;x<=4;x++)for(let z=-4;z<=4;z++){if(inTrunk3(x,z))continue;P(x,17,z,OP,'roofA')}
+  P(-2,16,2,LN,'roofA',{h:1});P(2,16,-2,LN,'roofA',{h:1});
+  for(let x=-3;x<=3;x++)for(let z=-3;z<=3;z++){if(inTrunk3(x,z))continue;P(x,18,z,OS,'roofB')}
+  /* 14: branch skeleton: a stub on the trunk, the stem, four arms and the branch for the leaf shelf */
+  [[2,19,0],[2,20,0],[3,20,0],[3,21,0]].forEach(c=>P(c[0],c[1],c[2],OG,'limbs'));
+  for(let y=21;y<=27;y++)P(0,y,0,OG,'limbs');
+  for(let d=1;d<=8;d++){[-d,d].forEach(x=>P(x,23,0,OG,'limbs'));if(d<=7)[-d,d].forEach(z=>P(0,23,z,OG,'limbs'))}
+  [[4,9,0],[5,9,0],[5,10,0],[6,10,0],[7,10,0],[8,10,0],[9,10,0]].forEach(c=>P(c[0],c[1],c[2],OG,'limbs'));
+  /* 15-17: the crown, shells of leaves two blocks thick on a few big lobes with a ragged edge */
+  const balls=[[-1,27,0,8.4,5.2,6.8],[-7,24,1,4.8,3.7,4.4],[5.5,28,0,5.2,3.9,5.2],[-2,31,-1,5.2,3.2,4.4],[-2,22.5,-1,4.4,2.5,3.9],[3,25,4,3.9,3,3.4]];
+  const inEll=(x,y,z,b,sh,n)=>{const rx=b[3]-sh,ry=b[4]-sh,rz=b[5]-sh;if(rx<=0||ry<=0||rz<=0)return false;return Math.pow((x-b[0])/rx,2)+Math.pow((y-b[1])/ry,2)+Math.pow((z-b[2])/rz,2)<=1+n};
+  const noise=(x,y,z)=>(hh(x+3,y+5,z+7)/100-.5)*.5;
+  const grp=y=>y<=23?0:y<=28?1:2;
+  const leaves=new Map();
+  for(let y=19;y<=35;y++)for(let x=-14;x<=12;x++)for(let z=-9;z<=9;z++){
+    const n=noise(x,y,z);
+    if(!balls.some(b=>inEll(x,y,z,b,0,n)))continue;
+    if(balls.some(b=>inEll(x,y,z,b,2,n)))continue;
+    if(!free(x,y,z))continue;
+    leaves.set(x+','+y+','+z,[x,y,z])}
+  const D=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const best=new Map(),q=[];
+  const seed=(v,g)=>{const k=v[0]+','+v[1]+','+v[2];if(!best.has(k)||g<best.get(k)){best.set(k,g);q.push(v)}};
+  logs.forEach(l=>D.forEach(d=>{const k=(l[0]+d[0])+','+(l[1]+d[1])+','+(l[2]+d[2]);const v=leaves.get(k);if(v)seed(v,grp(v[1]))}));
+  while(q.length){const v=q.shift(),bv=best.get(v[0]+','+v[1]+','+v[2]);
+    D.forEach(d=>{const k=(v[0]+d[0])+','+(v[1]+d[1])+','+(v[2]+d[2]);const n=leaves.get(k);if(!n)return;const c=Math.max(grp(n[1]),bv);if(!best.has(k)||c<best.get(k)){best.set(k,c);q.push(n)}})}
+  [...best.keys()].map(k=>leaves.get(k)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]||a[2]-b[2]).forEach(c=>{
+    P(c[0],c[1],c[2],LV,['canopyLow','canopyMid','canopyHigh'][best.get(c[0]+','+c[1]+','+c[2])])});
+  /* 18: leaf shelf on the right, three layers, solid on top */
+  const shelf=new Map();
+  for(let y=10;y<=12;y++)for(let x=5;x<=13;x++)for(let z=-4;z<=5;z++){
+    const e=Math.pow((x-9)/4.9,2)+Math.pow((z-0.5)/4.6,2)+Math.pow((y-11.5)/1.9,2);
+    if(e>1.05+noise(x,y,z))continue;
+    const need=(y===10&&x>=6&&x<=9&&z===1);
+    if(!need&&y===10&&hh(x,y,z)<45)continue;
+    if(!need&&y===12&&hh(x,y,z)<8)continue;
+    if(!free(x,y,z))continue;
+    shelf.set(x+','+y+','+z,[x,y,z])}
+  const sb=new Set(),sq=[];
+  logs.forEach(l=>D.forEach(d=>{const k=(l[0]+d[0])+','+(l[1]+d[1])+','+(l[2]+d[2]);if(shelf.has(k)&&!sb.has(k)){sb.add(k);sq.push(shelf.get(k))}}));
+  while(sq.length){const v=sq.pop();D.forEach(d=>{const k=(v[0]+d[0])+','+(v[1]+d[1])+','+(v[2]+d[2]);if(shelf.has(k)&&!sb.has(k)){sb.add(k);sq.push(shelf.get(k))}})}
+  [...sb].map(k=>shelf.get(k)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]||a[2]-b[2]).forEach(c=>P(c[0],c[1],c[2],LV,'sideLeaves'));
+  /* 19-20: the swing: a fence beam under the shelf, two ropes of fence, a slab seat */
+  for(let x=6;x<=9;x++)P(x,9,1,OF,'swingTop');
+  [6,9].forEach(x=>{for(let y=2;y<=8;y++)P(x,y,1,OF,'swingTop')});
+  for(let x=6;x<=9;x++)P(x,1,1,OS,'swingSeat');
+  /* 21: bamboo in clumps */
+  const clumps=[[-9,5],[-11,7],[-9,-4],[9,6],[11,4],[8,-5],[11,-2],[-7,12],[6,13],[-12,2],[13,9],[-13,10],[-5,11],[4,12],[-6,-6],[12,-6],[-3,13],[9,12]];
+  clumps.forEach(c=>{for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){
+    const x=c[0]+a,z=c[1]+b,h=hh(x,7,z);
+    if(h>=42||!free(x,0,z))continue;
+    const hgt=3+h%4;for(let y=0;y<hgt;y++)if(free(x,y,z))P(x,y,z,'Bamboo','bamboo')}});
+  /* 22: flowers, 23: mushrooms, 24: short grass */
+  const fl=['Poppy','Dandelion','Oxeye Daisy'];
+  const cand=[];
+  for(let z=-9;z<=13;z++)for(let x=-13;x<=14;x++){if(!free(x,0,z))continue;cand.push([x,z])}
+  cand.forEach(c=>{const h=hh(c[0]*3+7,5,c[1]*5+3);if(h<9)P(c[0],0,c[1],fl[hh(c[0],6,c[1])%3],'flowers')});
+  ringCells.filter(r=>r[2]>=2&&r[2]<=3&&r[1]!==3).forEach(r=>{if(hh(r[0],8,r[1])<70&&free(r[0],r[2],r[1]))P(r[0],r[2],r[1],'Red Mushroom','mushrooms')});
+  [[-5,4],[4,5],[-3,6],[5,-2]].forEach(c=>{if(free(c[0],0,c[1]))P(c[0],0,c[1],'Red Mushroom','mushrooms')});
+  cand.forEach(c=>{if(!free(c[0],0,c[1]))return;const h=hh(c[0]*3+7,5,c[1]*5+3);if(h>=9&&h<33)P(c[0],0,c[1],'Short Grass','grass')});
 })}
 function pagodaModel(){return mdl(add=>{
-  for(let x=0;x<=10;x++)for(let z=0;z<=10;z++)for(let y=0;y<=1;y++)add(x,y,z,'Stone Bricks',0);
-  for(let i=4;i<=6;i++){
-    add(-1,0,i,'Stone Brick Stairs',0,{f:[1,0]});add(11,0,i,'Stone Brick Stairs',0,{f:[-1,0]});
-    add(i,0,-1,'Stone Brick Stairs',0,{f:[0,1]});add(i,0,11,'Stone Brick Stairs',0,{f:[0,-1]})}
-  [[7,2],[5,8],[3,14]].forEach((t,k)=>{
-    const n=t[0],y0=t[1],lo=5-(n-1)/2,hi=5+(n-1)/2,st=k?2:1,ya=y0+4;
-    for(let x=lo;x<=hi;x++)for(let z=lo;z<=hi;z++){
-      if(x>lo&&x<hi&&z>lo&&z<hi)continue;
-      if((x-lo)%2===0&&(z-lo)%2===0){for(let y=0;y<4;y++)add(x,y0+y,z,'Cherry Log',st)}
-      else{add(x,y0,z,'Cherry Planks',st);add(x,y0+3,z,'Cherry Planks',st)}}
-    for(let x=lo-2;x<=hi+2;x++)for(let z=lo-2;z<=hi+2;z++)add(x,ya,z,'Dark Oak Planks',2);
-    for(let x=lo-1;x<=hi+1;x++)for(let z=lo-1;z<=hi+1;z++)add(x,ya+1,z,'Dark Oak Planks',2);
-    [[lo-2,lo-2],[hi+2,lo-2],[lo-2,hi+2],[hi+2,hi+2]].forEach(c=>{
-      add(c[0],ya+1,c[1],'Dark Oak Planks',2);add(c[0],ya-1,c[1],'Lantern',3,{h:1})});
-  });
-  for(let x=4;x<=6;x++)for(let z=4;z<=6;z++)add(x,20,z,'Dark Oak Planks',2);
-  add(5,21,5,'Dark Oak Planks',2);add(5,22,5,'Dark Oak Planks',2);
+  const CL='Cherry Log',CP='Cherry Planks',CS='Cherry Stairs',CSL='Cherry Slab',DP='Dark Oak Planks',DS='Dark Oak Stairs',DSL='Dark Oak Slab',DL='Dark Oak Log',
+        BP='Birch Planks',BSL='Birch Slab',BF='Birch Fence',SB='Stone Bricks',SBS='Stone Brick Slab',SBT='Stone Brick Stairs',MB='Moss Block',CLV='Cherry Leaves';
+  const ST=['banks','pond','plinth','causeway','lampPosts','floor1','doorSteps',
+    'pillars1','walls1','windows1','shrine','plate1','roof1','tips1','fascia1','rails2',
+    'pillars2','walls2','windows2','plate2','roof2','tips2','fascia2','rails3',
+    'pillars3','walls3','windows3','plate3','roof3','tips3','fascia3','rails4',
+    'pillars4','walls4','windows4','plate4','roof4','tips4','fascia4','pyramid','hips','finial','lanterns','trees','petals'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set();
+  const A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+  const c=14;
+  const P=(dx,y,dz,b,s,o)=>A(c+dx,y,c+dz,b,s,o);
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const ab=Math.abs;
+  const ring=h=>{const o=[];for(let dx=-h;dx<=h;dx++)for(let dz=-h;dz<=h;dz++)if(Math.max(ab(dx),ab(dz))===h)o.push([dx,dz]);return o};
+  const face=(h,dx,dz)=>[dx===h?-1:dx===-h?1:0,dz===h?-1:dz===-h?1:0];   /* high side towards the middle */
+  const inPond=(dx,dz)=>ab(dx)<=10&&ab(dz)<=10&&ab(dx)+ab(dz)<=16;
+  const inPlinth=(dx,dz)=>ab(dx)<=6&&ab(dz)<=6;
+  const path=(dx,dz)=>ab(dx)<=1&&dz>=7&&dz<=10;
+  const postCells=[];[-2,2].forEach(dx=>[8,10].forEach(dz=>postCells.push([dx,dz])));
+  const isPost=(dx,dz)=>postCells.some(p=>p[0]===dx&&p[1]===dz);
+  const trees=[[-11,-11],[11,-11],[-11,11],[11,11]];
+  /* ground: moss islands under the four trees and a landing for the causeway, then the pond */
+  const bank=[];
+  for(let dx=-13;dx<=13;dx++)for(let dz=-13;dz<=13;dz++){
+    if(inPond(dx,dz)||inPlinth(dx,dz))continue;
+    const nearTree=trees.some(t=>ab(dx-t[0])<=2&&ab(dz-t[1])<=2);
+    const landing=ab(dx)<=2&&dz>=11&&dz<=12;
+    const corner=ab(dx)>=8&&ab(dz)>=8&&ab(dx)<=12&&ab(dz)<=12&&!inPond(dx,dz);
+    if(nearTree||landing||corner)bank.push([dx,dz])}
+  bank.forEach(b=>P(b[0],0,b[1],MB,'banks'));
+  for(let dx=-10;dx<=10;dx++)for(let dz=-10;dz<=10;dz++){
+    if(!inPond(dx,dz)||inPlinth(dx,dz)||path(dx,dz)||isPost(dx,dz))continue;
+    P(dx,0,dz,'Water','pond')}
+  /* plinth, causeway, lamp posts, floor, door steps */
+  for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++)P(dx,0,dz,SB,'plinth');
+  ring(6).forEach(r=>{if(r[1]===6&&ab(r[0])<=1)P(r[0],0,r[1],SB,'plinth');else P(r[0],0,r[1],SBS,'plinth')});
+  for(let dx=-1;dx<=1;dx++)for(let dz=7;dz<=10;dz++)P(dx,0,dz,SB,'causeway');
+  postCells.forEach(p=>{P(p[0],0,p[1],SB,'lampPosts');P(p[0],1,p[1],SB,'lampPosts');P(p[0],2,p[1],'Lantern','lampPosts',{h:-1})});
+  for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++)P(dx,1,dz,CP,'floor1');
+  for(let dx=-1;dx<=1;dx++)P(dx,1,6,SBT,'doorSteps',{f:[0,-1]});
+  /* four storeys: walls on half-width 4, balcony ring at 5, roof out to 8 */
+  const pp=[-4,-2,2,4];
+  const isPil=(dx,dz)=>(ab(dz)===4&&pp.includes(dx))||(ab(dx)===4&&pp.includes(dz));
+  const isDoor=(n,dx,dz)=>n===1&&dz===4&&ab(dx)<=1;
+  const alt=(dx,dz)=>(ab(dx)+ab(dz))%2===0;
+  const tipCells=[];[[7,7],[-7,7],[7,-7],[-7,-7]].forEach(cr=>{tipCells.push(cr);[[cr[0]-Math.sign(cr[0]),cr[1]],[cr[0],cr[1]-Math.sign(cr[1])]].forEach(t=>tipCells.push(t))});
+  const isTip=(dx,dz)=>tipCells.some(t=>t[0]===dx&&t[1]===dz);
+  const isCorner=(dx,dz)=>ab(dx)===7&&ab(dz)===7;
+  for(let n=1;n<=4;n++){
+    const b=2+6*(n-1),ye=b+5,N=String(n);
+    ring(4).forEach(r=>{if(isPil(r[0],r[1]))for(let y=b;y<=b+4;y++)P(r[0],y,r[1],CL,'pillars'+N)});
+    ring(4).forEach(r=>{const dx=r[0],dz=r[1];if(isPil(dx,dz))return;
+      if(!isDoor(n,dx,dz)){P(dx,b,dz,CP,'walls'+N);P(dx,b+2,dz,CP,'walls'+N)}
+      P(dx,b+3,dz,CP,'walls'+N);P(dx,b+4,dz,CP,'walls'+N)});
+    ring(4).forEach(r=>{const dx=r[0],dz=r[1];if(isPil(dx,dz)||isDoor(n,dx,dz))return;P(dx,b+1,dz,DP,'windows'+N)});
+    if(n===1){
+      for(let dz=3;dz>=-1;dz--)P(0,2,dz,'Red Carpet','shrine');
+      for(let dx=-1;dx<=1;dx++)P(dx,2,-3,SB,'shrine');
+      [-1,1].forEach(dx=>P(dx,3,-3,'Lantern','shrine',{h:-1}));P(0,3,-3,'Flower Pot','shrine');
+      [[-3,3],[3,3],[-3,-3],[3,-3]].forEach(p=>P(p[0],2,p[1],'Lantern','shrine',{h:-1}))}
+    ring(4).concat(ring(5)).forEach(r=>P(r[0],ye,r[1],CP,'plate'+N));
+    /* roof: an eave ring of slabs, then a ring of tiles (alternating stairs and slabs) on planks */
+    ring(7).forEach(r=>{if(!isTip(r[0],r[1]))P(r[0],ye,r[1],DSL,'roof'+N)});
+    ring(6).forEach(r=>{if(n===4&&ab(r[0])===6&&ab(r[1])===6)return;P(r[0],ye,r[1],DP,'roof'+N);const f=face(6,r[0],r[1]);if(alt(r[0],r[1]))P(r[0],ye+1,r[1],DS,'roof'+N,{f});else P(r[0],ye+1,r[1],DSL,'roof'+N)});
+    tipCells.forEach(t=>{P(t[0],ye,t[1],CP,'tips'+N);if(isCorner(t[0],t[1]))P(t[0],ye+1,t[1],CSL,'tips'+N)});
+    ring(7).forEach(r=>{if(isCorner(r[0],r[1]))return;P(r[0],ye-1,r[1],alt(r[0],r[1])?BP:BSL,'fascia'+N)});
+    if(n<4)ring(5).forEach(r=>P(r[0],ye+1,r[1],BF,'rails'+(n+1)));
+    if(n===4){
+      /* top roof carries on up as a steep pyramid: a ring of stairs on planks, one layer higher every ring or two */
+      const off=[0,1,2,2,3,3,4,4];
+      for(let k=2;k<=7;k++){const h=7-k,ry=ye+off[k];
+        if(h===0){P(0,ry-1,0,DP,'pyramid');P(0,ry,0,DP,'pyramid');continue}
+        ring(h).forEach(r=>{const dx=r[0],dz=r[1];if(ab(dx)===h&&ab(dz)===h)return;
+          if(!taken.has((c+dx)+','+(ry-1)+','+(c+dz)))P(dx,ry-1,dz,DP,'pyramid');const f=face(h,dx,dz);
+          if(k<=3&&!alt(dx,dz))P(dx,ry,dz,DSL,'pyramid');else P(dx,ry,dz,DS,'pyramid',{f})})}
+      for(let k=1;k<=6;k++){const h=7-k,ry=ye+off[k];
+        [[1,1],[-1,1],[1,-1],[-1,-1]].forEach(s=>{const dx=s[0]*h,dz=s[1]*h;
+          if(!taken.has((c+dx)+','+(ry-1)+','+(c+dz)))P(dx,ry-1,dz,CP,'hips');P(dx,ry,dz,CS,'hips',{f:[-s[0],-s[1]]})})}
+    }
+  }
+  /* finial on the apex */
+  const ap=2+6*3+5+4;
+  for(let y=ap+1;y<=ap+10;y++)P(0,y,0,DL,'finial');
+  [ap+2,ap+4].forEach(y=>ring(1).forEach(r=>P(r[0],y,r[1],DSL,'finial')));
+  [ap+6,ap+8,ap+10].forEach(y=>[[1,0],[-1,0],[0,1],[0,-1]].forEach(r=>P(r[0],y,r[1],DSL,'finial')));
+  P(0,ap+11,0,DP,'finial');P(0,ap+12,0,'Lightning Rod','finial');
+  /* lanterns: hanging from the eave corners, standing on the balcony corner posts */
+  for(let n=1;n<=4;n++){const ye=2+6*(n-1)+5;
+    [[7,7],[-7,7],[7,-7],[-7,-7]].forEach(cr=>P(cr[0],ye-1,cr[1],'Lantern','lanterns',{h:1}));
+    if(n>=2)[[5,5],[-5,5],[5,-5],[-5,-5]].forEach(cr=>P(cr[0],ye-4,cr[1],'Lantern','lanterns',{h:-1}))}
+  /* four stepped cherry trees: trunk 4 tall, then layers of 7x7 (corners cut), 5x5, 3x3 and one on top */
+  trees.forEach(t=>{
+    const big=t[1]>0;
+    for(let y=1;y<=4;y++)P(t[0],y,t[1],CL,'trees');
+    const cells=new Map(),key=(x,y,z)=>x+','+y+','+z;
+    (big?[[5,3,true],[6,2,false],[7,1,false],[8,0,false]]:[[5,2,false],[6,1,false],[7,0,false]]).forEach(l=>{for(let a=-l[1];a<=l[1];a++)for(let bb=-l[1];bb<=l[1];bb++){
+      if(l[2]&&ab(a)===3&&ab(bb)===3)continue;
+      const x=c+t[0]+a,z=c+t[1]+bb;
+      if(taken.has(key(x,l[0],z))||(l[1]>0&&hh(x,l[0],z)<12))continue;
+      cells.set(key(x,l[0],z),[x,l[0],z])}});
+    /* drop any leaf that lost its neighbours, so nothing floats */
+    const solid=(x,y,z)=>cells.has(key(x,y,z))||(x===c+t[0]&&z===c+t[1]&&y>=1&&y<=4);
+    let again=true;while(again){again=false;cells.forEach((v,k)=>{const [x,y,z]=v;
+      if(![[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].some(d=>solid(x+d[0],y+d[1],z+d[2]))){cells.delete(k);again=true}})}
+    cells.forEach(v=>A(v[0],v[1],v[2],CLV,'trees'))});
+  /* petals scattered over the moss */
+  bank.forEach(b=>{const x=c+b[0],z=c+b[1];if(taken.has(x+',1,'+z))return;if(hh(x,9,z)<34)A(x,1,z,'Pink Petals','petals')});
+})}
+function sakuraModel(){return mdl(add=>{
+  const CL='Cherry Log',CP='Cherry Planks',CS='Cherry Stairs',CSL='Cherry Slab',CF='Cherry Fence',DP='Dark Oak Planks',DS='Dark Oak Stairs',DSL='Dark Oak Slab',SB='Stone Bricks',CLV='Cherry Leaves';
+  const ST=['plinth','footing','stoneSteps','floor','cherrySteps','cornerPosts','wallPosts','skirt','paper','sills','panes','beams','tatami','furnish','verandaPosts','verandaRail','stairPosts','brackets','planters','flowers',
+    'roof1','roof2','roof3','ridge','path','toriiPillars','toriiBeams','toriiCap','stoneLanterns','pondRim','pond','moss','bridgeDeck','bridgeStairs','bridgeRail','postLanterns',
+    'trunk','branches','lowerCanopy','upperCanopy','smallTrees','petals','lanterns'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set(),A=(x,y,z,b,s,o)=>{taken.add(x+','+y+','+z);add(x,y,z,b,S(s),o)};
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  /* plinth, steps, floor */
+  for(let x=4;x<=16;x++)for(let z=1;z<=11;z++)A(x,0,z,SB,'plinth');
+  /* stone footing: a ring of slabs round the plinth, one block out; the gaps are for the steps and the two lantern posts */
+  for(let x=3;x<=17;x++)for(let z=0;z<=12;z++){if(!(x===3||x===17||z===0||z===12))continue;if(z===12&&x>=8&&x<=12)continue;A(x,0,z,'Stone Brick Slab','footing')}
+  for(let x=9;x<=11;x++)A(x,0,12,'Stone Brick Stairs','stoneSteps',{f:[0,-1]});
+  for(let x=4;x<=16;x++)for(let z=1;z<=11;z++)if(!(z===11&&x>=9&&x<=11))A(x,1,z,CP,'floor');
+  for(let x=9;x<=11;x++)A(x,1,11,CS,'cherrySteps',{f:[0,-1]});
+  /* house frame: walls on x 6..14, z 3..9, 5 tall (layers 3-7) */
+  [[6,3],[14,3],[6,9],[14,9]].forEach(c=>{for(let y=2;y<=6;y++)A(c[0],y,c[1],CL,'cornerPosts')});
+  [[8,3],[10,3],[12,3],[8,9],[12,9],[6,5],[6,7],[14,5],[14,7]].forEach(c=>{for(let y=2;y<=6;y++)A(c[0],y,c[1],CL,'wallPosts')});
+  const gaps=[[7,3],[9,3],[11,3],[13,3],[7,9],[13,9],[6,4],[6,6],[6,8],[14,4],[14,6],[14,8]];
+  const door=[[9,9],[10,9],[11,9]];
+  const win=new Set(['9,3','11,3','7,9','13,9','6,6','14,6']);
+  gaps.forEach(g=>A(g[0],2,g[1],CP,'skirt'));
+  gaps.forEach(g=>{const w=win.has(g[0]+','+g[1]);
+    if(w)A(g[0],3,g[1],CP,'sills');
+    else{A(g[0],3,g[1],'White Concrete','paper');A(g[0],4,g[1],CP,'paper');A(g[0],5,g[1],'White Concrete','paper')}});
+  gaps.forEach(g=>{if(win.has(g[0]+','+g[1]))for(let y=4;y<=5;y++)A(g[0],y,g[1],'Glass Pane','panes')});
+  gaps.concat(door).forEach(g=>A(g[0],6,g[1],CP,'beams'));
+  /* inside: tatami mats, bookshelves, tea table, cushions, floor lamps (floor of the room is layer 2, y=1) */
+  const shelf=[9,10,11].flatMap(x=>[2,3].map(y=>[x,y,4])),table=[9,10,11].flatMap(x=>[6,7].map(z=>[x,2,z])),
+        cush=[[8,6],[8,7],[12,6],[12,7]],lamp=[[7,4],[13,4]];
+  const used=new Set([...[9,10,11].map(x=>x+',4'),...table.map(t=>t[0]+','+t[2]),...cush.map(c=>c.join(',')),...lamp.map(c=>c.join(','))]);
+  for(let x=7;x<=13;x++)for(let z=4;z<=8;z++)if(!used.has(x+','+z))A(x,2,z,'Moss Carpet','tatami');
+  shelf.forEach(c=>A(c[0],c[1],c[2],'Bookshelf','furnish'));
+  table.forEach(c=>A(c[0],c[1],c[2],CSL,'furnish'));
+  cush.forEach(c=>A(c[0],2,c[1],'Red Carpet','furnish'));
+  lamp.forEach(c=>A(c[0],2,c[1],'Lantern','furnish',{h:-1}));
+  /* veranda */
+  const vp=[[4,1],[10,1],[16,1],[4,11],[8,11],[12,11],[16,11],[4,4],[4,8],[16,4],[16,8]];
+  vp.forEach(c=>{for(let y=2;y<=6;y++)A(c[0],y,c[1],CL,'verandaPosts')});
+  const isP=new Set(vp.map(c=>c[0]+','+c[1]));
+  for(let x=4;x<=16;x++)for(let z=1;z<=11;z++){
+    if(!(x===4||x===16||z===1||z===11))continue;
+    if(isP.has(x+','+z))continue;
+    if(z===11&&x>=9&&x<=11)continue;
+    A(x,2,z,CF,'verandaRail')}
+  /* lantern posts either side of the front steps: 3 cherry fences and a lantern on top */
+  [8,12].forEach(x=>{for(let y=0;y<=2;y++)A(x,y,12,CF,'stairPosts');A(x,3,12,'Lantern','stairPosts',{h:-1})});
+  /* brackets under the eaves, against the posts, at both ends of every gap 3 or more blocks wide */
+  [[5,11,-1,0],[7,11,1,0],[9,11,-1,0],[11,11,1,0],[13,11,-1,0],[15,11,1,0],[5,1,-1,0],[9,1,1,0],[11,1,-1,0],[15,1,1,0],
+   [4,5,0,-1],[4,7,0,1],[16,5,0,-1],[16,7,0,1]].forEach(b=>A(b[0],6,b[1],CS,'brackets',{f:[b[2],b[3]]}));
+  /* roof: pairs of rings, slabs outside and stairs just inside, each pair one layer higher; from ring 2 up every ring sits on planks.
+     The four eave corners are lifted: a plank (not a slab) on each corner and either side of it, and a slab on top of each corner plank. */
+  const tip=new Set(),corners=[[3,0],[17,0],[3,12],[17,12]];
+  corners.forEach(c=>{tip.add(c.join(','));[[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{const x=c[0]+d[0],z=c[1]+d[1];if(x>=3&&x<=17&&z>=0&&z<=12&&(x===3||x===17||z===0||z===12))tip.add(x+','+z)})});
+  for(let k=0;k<=6;k++){
+    const x0=3+k,x1=17-k,z0=k,z1=12-k,ry=7+(k>>1),st=['roof1','roof1','roof2','roof2','roof3','roof3','ridge'][k];
+    for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){
+      if(!(x===x0||x===x1||z===z0||z===z1))continue;
+      if(k===6){A(x,9,z,DP,'ridge');if(x===10)A(x,10,z,DP,'ridge');else A(x,10,z,DSL,'ridge');continue}
+      if(k>=2)A(x,ry-1,z,DP,st);
+      if(k===0){
+        if(tip.has(x+','+z)){A(x,ry,z,CP,st);if(corners.some(c=>c[0]===x&&c[1]===z))A(x,ry+1,z,CSL,st)}
+        else A(x,ry,z,CSL,st)}
+      else if(k%2===0)A(x,ry,z,DSL,st);
+      else A(x,ry,z,k===1?CS:DS,st,{f:[x===x0?1:x===x1?-1:0,z===z0?1:z===z1?-1:0]})}}
+  A(10,11,6,'Lightning Rod','ridge');
+  /* path with stepping stones to the pond, torii, stone lanterns */
+  for(let x=9;x<=11;x++)for(let z=13;z<=17;z++)A(x,0,z,'Stone Brick Slab','path');
+  [12,13].forEach(x=>A(x,0,17,'Stone Brick Slab','path'));
+  [8,12].forEach(x=>{for(let y=0;y<=4;y++)A(x,y,16,CL,'toriiPillars')});
+  for(let x=9;x<=11;x++)A(x,3,16,CP,'toriiBeams');
+  for(let x=7;x<=13;x++)A(x,5,16,CP,'toriiBeams');
+  A(10,4,16,CP,'toriiBeams');
+  for(let x=6;x<=14;x++)A(x,6,16,CSL,'toriiCap');
+  [8,12].forEach(x=>{A(x,0,13,SB,'stoneLanterns');A(x,1,13,SB,'stoneLanterns');A(x,2,13,'Lantern','stoneLanterns',{h:-1})});
+  /* pond, rocks and arched bridge (5 blocks long, over the water and the rim at both ends) */
+  for(let x=14;x<=20;x++)for(let z=13;z<=17;z++)if(x===14||x===20||z===13||z===17)A(x,0,z,SB,'pondRim');
+  for(let x=15;x<=19;x++)for(let z=14;z<=16;z++){if(x===19&&z!==15)A(x,0,z,'Mossy Cobblestone','pond');else A(x,0,z,'Water','pond')}
+  [13,14,15,16].forEach(z=>A(13,0,z,'Moss Block','moss'));for(let x=14;x<=20;x++)A(x,0,18,'Moss Block','moss');
+  for(let x=15;x<=17;x++){
+    for(let z=14;z<=16;z++)A(x,1,z,CP,'bridgeDeck');A(x,2,15,CP,'bridgeDeck');
+    A(x,1,13,CS,'bridgeStairs',{f:[0,1]});A(x,2,14,CS,'bridgeStairs',{f:[0,1]});A(x,2,16,CS,'bridgeStairs',{f:[0,-1]});A(x,1,17,CS,'bridgeStairs',{f:[0,-1]})}
+  [15,17].forEach(x=>{A(x,2,13,CF,'bridgeRail');[14,15,16].forEach(z=>A(x,3,z,CF,'bridgeRail'));A(x,2,17,CF,'bridgeRail')});
+  /* lanterns on the bridge end posts and the pond corners */
+  [15,17].forEach(x=>[13,17].forEach(z=>A(x,3,z,'Lantern','postLanterns',{h:-1})));
+  [[14,13],[20,13],[14,17],[20,17]].forEach(c=>A(c[0],1,c[1],'Lantern','postLanterns',{h:-1}));
+  /* flower boxes on the veranda floor under the six windows (f points at the wall): 3 wide under each front, side window, 5 wide under the back pair */
+  const boxes=[];
+  [6,7,8,12,13,14].forEach(x=>boxes.push([x,10,0,-1,'Pink Tulip']));
+  [8,9,10,11,12].forEach(x=>boxes.push([x,2,0,1,'Pink Tulip']));
+  [5,6,7].forEach(z=>{boxes.push([5,z,1,0,'Allium']);boxes.push([15,z,-1,0,'Allium'])});
+  boxes.forEach(b=>A(b[0],2,b[1],'Cherry Trapdoor','planters',{f:[b[2],b[3]]}));
+  boxes.forEach(b=>A(b[0],3,b[1],b[4],'flowers',{f:[b[2],b[3]]}));
+  /* big cherry tree */
+  for(let x=2;x<=3;x++)for(let z=15;z<=16;z++)for(let y=0;y<=6;y++)A(x,y,z,CL,'trunk');
+  [[1,5,15],[0,5,15],[0,6,15],[4,5,15],[5,5,15],[5,6,15],[2,5,17],[2,5,18],[2,6,18],[3,5,14],[3,5,13],[3,6,13]].forEach(c=>A(c[0],c[1],c[2],CL,'branches'));
+  const blob=(cx,cy,cz,rx,ry,rz)=>{const o=[];for(let x=Math.floor(cx-rx);x<=Math.ceil(cx+rx);x++)for(let y=Math.floor(cy-ry);y<=Math.ceil(cy+ry);y++)for(let z=Math.floor(cz-rz);z<=Math.ceil(cz+rz);z++){
+    const d=((x-cx)/rx)**2+((y-cy)/ry)**2+((z-cz)/rz)**2;if(d<=1&&hh(x,y,z)>=9)o.push([x,y,z])}return o};
+  const lv=blob(2.5,8.2,15.5,3.4,2.7,3.4).concat(blob(2.5,6.6,15.5,3.6,1.5,3.6));
+  const seen=new Set(),low=[];
+  lv.forEach(c=>{const k=c.join(',');if(seen.has(k)||taken.has(k))return;seen.add(k);low.push(c)});
+  const lowSet=new Set(low.map(c=>c.join(',')));
+  const fringe=[];low.filter(c=>c[1]===6).forEach(c=>{const k=c[0]+',5,'+c[2];if(hh(c[0],3,c[2])<26&&!taken.has(k)&&!lowSet.has(k)){lowSet.add(k);fringe.push([c[0],5,c[2]])}});
+  low.concat(fringe).forEach(c=>A(c[0],c[1],c[2],CLV,c[1]<=7?'lowerCanopy':'upperCanopy'));
+  /* two small trees, back right and back left */
+  [[19,3],[1,3]].forEach(t=>{for(let y=0;y<=3;y++)A(t[0],y,t[1],CL,'smallTrees');
+    blob(t[0],5.2,t[1],1.9,1.9,1.9).forEach(c=>{const k=c.join(',');if(taken.has(k))return;A(c[0],c[1],c[2],CLV,'smallTrees')})});
+  /* petals on the ground */
+  const petals=(cx,cz,r0,r1,xa,xb,za,zb,seed)=>{for(let x=xa;x<=xb;x++)for(let z=za;z<=zb;z++){const k=x+',0,'+z;if(taken.has(k))continue;const d=Math.hypot(x-cx,z-cz);if(d>=r0&&d<=r1&&hh(x,seed,z)<36)A(x,0,z,'Pink Petals','petals')}};
+  petals(2.5,15.5,1.5,4.8,-1,8,11,19,7);petals(19,3,1,3.4,16,20,0,6,9);petals(1,3,1,3.2,0,4,0,6,11);
+  /* hanging lanterns: under the veranda roof, and one from the torii */
+  [[6,11],[10,11],[14,11],[7,1],[13,1],[4,6],[16,6]].forEach(c=>A(c[0],6,c[1],'Lantern','lanterns',{h:1}));
+  A(10,2,16,'Lantern','lanterns',{h:1});
+})}
+function terraceModel(){return mdl(add=>{
+  const OP='Oak Planks',SP='Spruce Planks',OL='Oak Log',OF='Oak Fence',OS='Oak Stairs',OSL='Oak Slab',SB='Stone Bricks',SBS='Stone Brick Slab',SBT='Stone Brick Stairs',LV='Oak Leaves',AZ='Flowering Azalea Leaves',HB='Hay Bale',BR='Barrel',BS='Bookshelf',LN='Lantern';
+  const ST=['ring','floor','outerPillars','innerPillars','walls','panes','frontRail','storerooms','shelves','tables','deck','wingFloors','path','groundLanterns','grandFill','grandStairs',
+    'upperPillars','upperWalls','upperPanes','upperRails','upperShelves','upperStores','upperTables','roofPosts','roofEdge','roofFence','roofFarmland','roofWater','upperLanterns','roofWheat','roofLanterns','roofStairs',
+    'ponds','bedRims','bedSoil','cropsA','cropsB','scarecrow','bedHedges','frontHedge','farmCorner','ringHedge','trees'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set(),A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const PX=[1,5,9,13,17,21,25],PZ=[2,6,10,14,18];
+  const bayX=[[2,4],[6,8],[10,12],[14,16],[18,20],[22,24]],bayZ=[[3,5],[7,9],[11,13],[15,17]];
+  const inD=(x,z)=>(z>=2&&z<=6&&x>=1&&x<=25)||(z>=7&&z<=18&&((x>=1&&x<=5)||(x>=21&&x<=25)));
+  const inC=(x,z)=>x>=6&&x<=20&&z>=7&&z<=18;
+  const inR=(x,z)=>x>=1&&x<=25&&z>=2&&z<=18;
+  const isP=(x,z)=>PX.includes(x)&&PZ.includes(z);
+  const isUP=(x,z)=>isP(x,z)&&inD(x,z)&&!(x===13&&z===6);
+  const nb4=[[1,0],[-1,0],[0,1],[0,-1]],nb8=nb4.concat([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  const isEdge=(x,z)=>nb8.some(d=>!inD(x+d[0],z+d[1]));
+  const isOuter=(x,z)=>nb4.some(d=>!inR(x+d[0],z+d[1]));
+  const isInner=(x,z)=>nb4.some(d=>inC(x+d[0],z+d[1]));
+  const rng=(a,b)=>{const o=[];for(let i=a;i<=b;i++)o.push(i);return o};
+  const D=[];for(let x=1;x<=25;x++)for(let z=2;z<=18;z++)if(inD(x,z))D.push([x,z]);
+  const gap=new Set(['21,11','21,12','21,13']);
+  /* ground: stone border, floor, pillars */
+  for(let x=0;x<=26;x++)for(let z=1;z<=19;z++){if(!(x===0||x===26||z===1||z===19))continue;if(z===19&&x>=12&&x<=14)continue;A(x,0,z,SBS,'ring')}
+  for(let x=1;x<=25;x++)for(let z=2;z<=18;z++)A(x,0,z,OP,'floor');
+  PX.forEach(x=>PZ.forEach(z=>{const o=(x===1||x===25||z===2||z===18);for(let y=1;y<=3;y++)A(x,y,z,OL,o?'outerPillars':'innerPillars')}));
+  /* ground walls: back, left, right; front is an open arcade with a low rail */
+  const wallCells=[];
+  bayX.forEach(b=>rng(b[0],b[1]).forEach(x=>wallCells.push([x,2])));
+  bayZ.forEach(b=>rng(b[0],b[1]).forEach(z=>{wallCells.push([1,z]);wallCells.push([25,z])}));
+  wallCells.forEach(c=>A(c[0],1,c[1],OP,'walls'));
+  wallCells.forEach(c=>{A(c[0],2,c[1],'Glass Pane','panes');A(c[0],3,c[1],'Glass Pane','panes')});
+  bayX.forEach(b=>rng(b[0],b[1]).forEach(x=>A(x,1,18,OF,'frontRail')));
+  /* ground storerooms and library */
+  [bayZ[1],bayZ[3]].forEach(b=>rng(b[0],b[1]).forEach(z=>{A(2,1,z,HB,'storerooms');A(2,2,z,HB,'storerooms')}));
+  rng(bayZ[2][0],bayZ[2][1]).forEach(z=>{[2,24].forEach(x=>{A(x,1,z,BR,'storerooms');A(x,2,z,BR,'storerooms')})});
+  [1,3,5].forEach(i=>rng(bayX[i][0],bayX[i][1]).forEach(x=>{A(x,1,3,BR,'storerooms');A(x,2,3,BR,'storerooms')}));
+  [0,2,4].forEach(i=>rng(bayX[i][0],bayX[i][1]).forEach(x=>{A(x,1,3,BS,'shelves');A(x,2,3,BS,'shelves')}));
+  [bayZ[1],bayZ[3]].forEach(b=>rng(b[0],b[1]).forEach(z=>{A(24,1,z,BS,'shelves');A(24,2,z,BS,'shelves')}));
+  [[7,8],[18,19]].forEach(t=>t.forEach(x=>{A(x,1,10,OSL,'tables');A(x,1,9,OS,'tables',{f:[0,-1]});A(x,1,11,OS,'tables',{f:[0,1]})}));
+  /* decks and floors at layer 5 (y=4); the two back beds are sunk into the deck */
+  const beds=[[8,7],[15,7],[8,13],[15,13]];
+  const pit=(x,z)=>beds.slice(0,2).some(b=>x>=b[0]+1&&x<=b[0]+2&&z>=b[1]+1&&z<=b[1]+3);
+  for(let x=6;x<=20;x++)for(let z=7;z<=18;z++){if(x>=12&&x<=14)continue;if(pit(x,z))continue;A(x,4,z,OP,'deck')}
+  D.forEach(c=>A(c[0],4,c[1],SP,'wingFloors'));
+  for(let x=12;x<=14;x++)for(let z=7;z<=18;z++)A(x,4,z,SB,'path');
+  [3,7,11,15,19,23].forEach(x=>[4,8,12,16].forEach(z=>A(x,3,z,LN,'groundLanterns',{h:1})));
+  /* grand stairs up from the front gap in the border */
+  for(let x=12;x<=14;x++){for(let y=0;y<=2;y++)A(x,y,19,SB,'grandFill');for(let y=0;y<=1;y++)A(x,y,20,SB,'grandFill');A(x,0,21,SB,'grandFill')}
+  for(let x=12;x<=14;x++){A(x,3,19,SBT,'grandStairs',{f:[0,-1]});A(x,2,20,SBT,'grandStairs',{f:[0,-1]});A(x,1,21,SBT,'grandStairs',{f:[0,-1]});A(x,0,22,SBT,'grandStairs',{f:[0,-1]})}
+  /* upper hall: pillars, walls, rails */
+  PX.forEach(x=>PZ.forEach(z=>{if(isUP(x,z))for(let y=5;y<=7;y++)A(x,y,z,OL,'upperPillars')}));
+  D.forEach(c=>{const x=c[0],z=c[1];if(isOuter(x,z)&&!isUP(x,z))A(x,5,z,OP,'upperWalls')});
+  D.forEach(c=>{const x=c[0],z=c[1];if(isOuter(x,z)&&!isUP(x,z)){A(x,6,z,'Glass Pane','upperPanes');A(x,7,z,'Glass Pane','upperPanes')}});
+  D.forEach(c=>{const x=c[0],z=c[1];if(isInner(x,z)&&!isUP(x,z)&&!(z===6&&x>=12&&x<=14))A(x,5,z,OF,'upperRails')});
+  [0,1,4,5].forEach(i=>rng(bayX[i][0],bayX[i][1]).forEach(x=>{A(x,5,3,BS,'upperShelves');A(x,6,3,BS,'upperShelves')}));
+  [bayZ[1],bayZ[3]].forEach(b=>rng(b[0],b[1]).forEach(z=>{A(24,5,z,BS,'upperShelves');A(24,6,z,BS,'upperShelves')}));
+  [2,3].forEach(i=>rng(bayX[i][0],bayX[i][1]).forEach(x=>A(x,5,3,BR,'upperStores')));
+  [bayZ[1],bayZ[3]].forEach(b=>rng(b[0],b[1]).forEach(z=>{A(2,5,z,HB,'upperStores');A(2,6,z,HB,'upperStores')}));
+  rng(bayZ[2][0],bayZ[2][1]).forEach(z=>{A(2,5,z,BR,'upperStores');A(24,5,z,BR,'upperStores')});
+  [[3,4],[22,23]].forEach(t=>t.forEach(x=>{A(x,5,10,OSL,'upperTables');A(x,5,9,OS,'upperTables',{f:[0,-1]});A(x,5,11,OS,'upperTables',{f:[0,1]})}));
+  /* the roof farm at layer 9 (y=8): the farmland is also the hall ceiling */
+  D.forEach(c=>{const x=c[0],z=c[1];if(isUP(x,z)){A(x,8,z,OL,'roofPosts');A(x,9,z,OL,'roofPosts')}});
+  D.forEach(c=>{const x=c[0],z=c[1];if(isEdge(x,z)&&!isUP(x,z))A(x,8,z,OP,'roofEdge')});
+  D.forEach(c=>{const x=c[0],z=c[1];if(isEdge(x,z)&&!isUP(x,z)&&!gap.has(x+','+z))A(x,9,z,OF,'roofFence')});
+  const isW=(x,z)=>(z===4&&x>=2&&x<=24)||(x===3&&z>=5&&z<=17)||(x===23&&z>=5&&z<=17);
+  const inner=D.filter(c=>!isEdge(c[0],c[1]));
+  inner.forEach(c=>{if(!isW(c[0],c[1]))A(c[0],8,c[1],'Farmland','roofFarmland')});
+  inner.forEach(c=>{if(isW(c[0],c[1]))A(c[0],8,c[1],'Water','roofWater')});
+  [3,7,11,15,19,23].forEach(x=>A(x,7,4,LN,'upperLanterns',{h:1}));
+  [8,12,16].forEach(z=>{A(3,7,z,LN,'upperLanterns',{h:1});A(23,7,z,LN,'upperLanterns',{h:1})});
+  inner.forEach(c=>{if(!isW(c[0],c[1]))A(c[0],9,c[1],'Wheat','roofWheat')});
+  D.forEach(c=>{const x=c[0],z=c[1];if(isEdge(x,z)&&!gap.has(x+','+z)&&(isUP(x,z)||(PZ.includes(z)&&x%4===3)||(PX.includes(x)&&z%4===0)))A(x,10,z,LN,'roofLanterns',{h:-1})});
+  /* stairs up to the roof, beside the right wing */
+  [19,20].forEach(x=>{A(x,5,16,OS,'roofStairs',{f:[0,-1]});A(x,5,15,OP,'roofStairs');A(x,6,15,OS,'roofStairs',{f:[0,-1]});
+    for(let y=5;y<=6;y++)A(x,y,14,OP,'roofStairs');A(x,7,14,OS,'roofStairs',{f:[0,-1]});
+    for(let y=5;y<=7;y++)A(x,y,13,OP,'roofStairs');A(x,8,13,OS,'roofStairs',{f:[0,-1]})});
+  /* courtyard: ponds, crop beds, scarecrow, hedges, farm corner */
+  [6,19].forEach(px=>{[7,12].forEach(z=>[px,px+1].forEach(x=>A(x,5,z,SB,'ponds')));[px,px+1].forEach(x=>rng(8,11).forEach(z=>A(x,5,z,'Water','ponds')))});
+  const rim=(bx,bz,x,z)=>x===bx||x===bx+3||z===bz||z===bz+4;
+  beds.forEach((b,i)=>{for(let x=b[0];x<=b[0]+3;x++)for(let z=b[1];z<=b[1]+4;z++)if(rim(b[0],b[1],x,z)){A(x,5,z,SB,'bedRims');if(i<2)A(x,6,z,SB,'bedRims')}});
+  const soil=b=>[[b[0]+1,b[1]+1],[b[0]+2,b[1]+1],[b[0]+2,b[1]+2],[b[0]+1,b[1]+3],[b[0]+2,b[1]+3]];
+  beds.forEach((b,i)=>{const y=i<2?4:5;A(b[0]+1,y,b[1]+2,'Water','bedSoil');soil(b).forEach(c=>A(c[0],y,c[1],'Farmland','bedSoil'))});
+  soil(beds[0]).forEach(c=>A(c[0],5,c[1],'Wheat','cropsA'));
+  soil(beds[1]).forEach(c=>{if(!(c[0]===17&&c[1]===9))A(c[0],5,c[1],'Carrots','cropsA')});
+  A(10,6,15,'Wheat','cropsA');A(17,6,15,'Carrots','cropsA');
+  [[9,14],[10,14],[9,16],[10,16]].forEach(c=>A(c[0],6,c[1],'Pumpkin','cropsB'));
+  [[16,14],[17,14],[16,16],[17,16]].forEach(c=>A(c[0],6,c[1],'Melon','cropsB'));
+  A(17,5,9,OF,'scarecrow');A(17,6,9,OF,'scarecrow');A(17,7,9,HB,'scarecrow');A(17,7,8,OF,'scarecrow');A(17,7,10,OF,'scarecrow');A(17,8,9,'Pumpkin','scarecrow');
+  beds.forEach((b,i)=>{for(let x=b[0];x<=b[0]+3;x++)for(let z=b[1];z<=b[1]+4;z++)if(rim(b[0],b[1],x,z)){const h=hh(x,6,z);if(h<28)continue;A(x,i<2?7:6,z,h%5===0?AZ:LV,'bedHedges')}});
+  rng(6,20).forEach(x=>{if(x>=12&&x<=14)return;A(x,5,18,hh(x,5,18)%4===0?AZ:LV,'frontHedge')});
+  [6,7].forEach(x=>{[13,14].forEach(z=>A(x,5,z,HB,'farmCorner'));A(x,6,13,HB,'farmCorner');[16,17].forEach(z=>A(x,5,z,BR,'farmCorner'));A(x,6,17,'Flower Pot','farmCorner')});
+  [19,20].forEach(x=>{A(x,5,17,BR,'farmCorner');A(x,6,17,'Flower Pot','farmCorner')});
+  for(let x=0;x<=26;x++)for(let z=1;z<=19;z++){if(!(x===0||x===26||z===1||z===19))continue;if(z===19&&x>=12&&x<=14)continue;const h=hh(x,1,z);if(h<22)continue;A(x,1,z,h%6===0?AZ:LV,'ringHedge')}
+  /* two oak trees outside the border */
+  [[-2,16],[28,4]].forEach(t=>{for(let y=0;y<=4;y++)A(t[0],y,t[1],OL,'trees');
+    for(let x=t[0]-3;x<=t[0]+3;x++)for(let y=3;y<=8;y++)for(let z=t[1]-3;z<=t[1]+3;z++){const d=((x-t[0])/2.5)**2+((y-5.6)/2.2)**2+((z-t[1])/2.5)**2;if(d<=1&&hh(x,y,z)>=8&&!taken.has(x+','+y+','+z))A(x,y,z,LV,'trees')}});
 })}
 function mushModel(){return mdl(add=>{
-  const ring=[];
-  for(let x=-2;x<=2;x++)for(let z=-2;z<=2;z++){const r=Math.sqrt(x*x+z*z);if(r>=1.6&&r<=2.6)ring.push([x,z])}
-  const win=(x,y,z)=>(y===3||y===4)&&((x===-2&&z===0)||(x===2&&z===0)||(x===0&&z===-2));
-  ring.forEach(c=>{for(let y=1;y<=5;y++){
-    if(c[0]===0&&c[1]===2&&y<=2)continue;
-    add(c[0],y,c[1],win(c[0],y,c[1])?'Glass Pane':'Mushroom Stem',win(c[0],y,c[1])?2:0)}});
-  for(let x=-4;x<=4;x++)for(let z=-4;z<=4;z++)for(let y=0;y<=3;y++){
-    if((x*x+z*z)/16+y*y/9<=1)add(x,6+y,z,'Red Mushroom Block',1)}
-  for(let x=-4;x<=4;x++)for(let z=-4;z<=4;z++){
-    if(x*x+z*z>16)continue;
-    if(x>=-1&&x<=1&&z>=3&&z<=5)continue;
-    if(Math.abs(x)===2&&z>=3&&z<=5)continue;
-    add(x,0,z,'Moss Block',0)}
-  for(let x=-1;x<=1;x++)for(let z=3;z<=5;z++)add(x,0,z,'Oak Planks',3);
-  [3,4,5].forEach(z=>{add(-2,0,z,'Flower Pot',3);add(2,0,z,'Flower Pot',3)});
-  add(-1,1,5,'Lantern',3,{h:-1});add(1,1,5,'Lantern',3,{h:-1});
+  const WC='White Concrete',RM='Red Mushroom Block',DP='Dark Oak Planks',DS='Dark Oak Slab',DF='Dark Oak Fence',LN='Lantern',
+        CD='Coarse Dirt',DPATH='Dirt Path',GB='Grass Block',OG='Oak Log',LV='Oak Leaves',MS='Mushroom Stem';
+  const ST=['terrace','path','stemLow','stemMid','stemHigh','door','posts','awning','lamp','capA','capB','capC','capD','capE',
+    'bush','trunk','crown','mushroom','poppies','daisies','grass'];
+  const S=n=>{const i=ST.indexOf(n);if(i<0)throw new Error('step '+n);return i};
+  const taken=new Set();
+  const A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(taken.has(k))throw new Error('dup '+k+' '+b+' '+s);taken.add(k);add(x,y,z,b,S(s),o)};
+  const cx=12,cz=12;
+  const P=(dx,y,dz,b,s,o)=>A(cx+dx,y,cz+dz,b,s,o);
+  const free=(dx,y,dz)=>!taken.has((cx+dx)+','+y+','+(cz+dz));
+  const hh=(x,y,z)=>(((x*73856093)^(y*19349663)^(z*83492791))>>>0)%100;
+  const ab=Math.abs;
+  /* 0: three grassy steps at the back right, with a little mushroom on top */
+  const tops=[];
+  for(let x=7;x<=9;x++)for(let z=-3;z<=1;z++){const top=2-(x-7);for(let y=0;y<top;y++)P(x,y,z,CD,'terrace');P(x,top,z,GB,'terrace');tops.push([x,top,z])}
+  /* 1: winding coarse dirt path from the door */
+  [[-1,4],[-1,5],[-1,6],[0,6],[-2,6],[-2,7],[-3,7],[-3,8],[-4,8],[-4,9],[-5,9],[-5,10],[-6,10]].forEach(c=>P(c[0],0,c[1],DPATH,'path'));
+  /* 2-4: the stem, an octagon 7 wide whose columns get lower towards the edge */
+  const inS=(x,z)=>x*x+z*z<=12;
+  const colH=(x,z)=>{
+    if(x===-1&&z===3)return 4;if(x===0&&z===3)return 4;if(x===1&&z===3)return 6;
+    const c=Math.max(ab(x),ab(z));
+    if(c<=1)return 8;
+    const h=hh(x,5,z);
+    if(c===2)return h<40?8:h<75?7:6;
+    return h<30?6:h<65?5:h<85?4:3};
+  for(let x=-3;x<=3;x++)for(let z=-3;z<=3;z++){
+    if(!inS(x,z))continue;
+    const h=colH(x,z);
+    for(let y=0;y<h;y++){
+      if(x===-1&&z===3&&(y===1||y===2))continue;
+      P(x,y,z,WC,y<=1?'stemLow':y<=3?'stemMid':'stemHigh')}}
+  /* 5: dark oak door, 2 tall */
+  [1,2].forEach(y=>P(-1,y,3,DP,'door'));
+  /* 6-8: awning over the door: two posts, a plank roof with slab overhang, a narrower top board, a hanging lantern */
+  [-2,0].forEach(x=>{for(let y=0;y<=2;y++)P(x,y,5,DF,'posts')});
+  for(let x=-2;x<=0;x++)P(x,3,4,DP,'awning');
+  [-3,1].forEach(x=>P(x,3,4,DS,'awning'));
+  for(let x=-3;x<=1;x++)P(x,3,5,DS,'awning');
+  P(-1,4,4,DP,'awning');
+  P(-1,2,5,LN,'lamp',{h:1});
+  /* 9-13: the cap, five stepped tiers of red mushroom block with the corners cut off */
+  [[5,8],[4,6],[3,5],[2,3]].forEach((t,i)=>{
+    const step=['capA','capB','capC','capD'][i];
+    for(let x=-t[0];x<=t[0];x++)for(let z=-t[0];z<=t[0];z++){
+      if(ab(x)+ab(z)>t[1])continue;
+      P(x,8+i,z,RM,step)}});
+  for(let x=-2;x<=2;x++)for(let z=-1;z<=1;z++)P(x,12,z,RM,'capE');
+  /* 14-17: leafy bush and an oak tree behind, and a tiny mushroom on the terrace */
+  for(let x=6;x<=8;x++)for(let z=-6;z<=-4;z++){P(x,0,z,LV,'bush');if(hh(x,6,z)<60)P(x,1,z,LV,'bush')}
+  for(let y=0;y<=6;y++)P(-8,y,-1,OG,'trunk');
+  for(let y=5;y<=8;y++)for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){
+    const inside=y<=6?!(ab(a)===2&&ab(b)===2):y===7?(ab(a)<=1&&ab(b)<=1):(ab(a)+ab(b)<=1);
+    if(!inside)continue;
+    if(free(-8+a,y,-1+b))P(-8+a,y,-1+b,LV,'crown')}
+  P(7,3,-1,MS,'mushroom');P(7,4,-1,RM,'mushroom');
+  /* 18-19: poppies by the door and path, white daisies and alliums scattered */
+  [[3,4],[4,4],[3,5],[4,3],[5,4],[5,5],[4,6],[3,6],[5,6],[4,5],[6,5],[5,3],[-4,3],[-5,4],[-4,5],[-6,6],[-5,5],[-6,5],[-4,4],[2,7],[-5,6]].forEach(c=>{if(free(c[0],0,c[1]))P(c[0],0,c[1],'Poppy','poppies')});
+  [[-3,5],[5,3],[1,6],[-6,8],[2,8],[6,6]].forEach(c=>{if(free(c[0],0,c[1]))P(c[0],0,c[1],'Oxeye Daisy','daisies')});
+  /* 20: short grass all round */
+  for(let z=-7;z<=10;z++)for(let x=-8;x<=9;x++){
+    if(!free(x,0,z))continue;
+    if(ab(x)<=3&&ab(z)<=3)continue;
+    if(hh(x*3+2,9,z*5+4)<26)P(x,0,z,'Short Grass','grass')}
+  tops.forEach(c=>{if(free(c[0],c[1]+1,c[2])&&hh(c[0],11,c[2])<45)P(c[0],c[1]+1,c[2],'Short Grass','grass')});
 })}
 function lodgeModel(){return mdl(add=>{
   const TC='Terracotta',LG='Dark Oak Log',SB='Stone Bricks';
   const mainEdge=(x,z)=>x===0||x===6||z===0||z===8,wingEdge=(x,z)=>x===13||z===2||z===6;
+  /* step map: 0 outline | 1-2 floors | 3-4 posts | 5-7 walls | 8 glass | 9-10 roof outline | 11-14 roof cover | 15-16 porch | 17-18 chimney | 19 lanterns | 20 lamp post | 21 garden */
   for(let x=0;x<=6;x++)for(let z=0;z<=8;z++){add(x,0,z,SB,1);if(mainEdge(x,z))add(x,0,z,'Bricks',0,{e:0})}
-  for(let x=7;x<=13;x++)for(let z=2;z<=6;z++){add(x,0,z,SB,1);if(wingEdge(x,z))add(x,0,z,'Bricks',0,{e:0})}
-  for(let x=1;x<=4;x++)for(let z=9;z<=11;z++)add(x,0,z,SB,1);
+  for(let x=7;x<=13;x++)for(let z=2;z<=6;z++){add(x,0,z,SB,2);if(wingEdge(x,z))add(x,0,z,'Bricks',0,{e:0})}
+  for(let x=1;x<=4;x++)for(let z=9;z<=11;z++)add(x,0,z,SB,2);
   const mw=new Set(['1,8','5,8','1,0','3,0','5,0','0,3','0,5','6,1','6,7']);
   for(let x=0;x<=6;x++)for(let z=0;z<=8;z++){
     if(!mainEdge(x,z))continue;
     const post=(x%2===0&&(z===0||z===8))||((x===0||x===6)&&z%2===0);
     for(let y=1;y<=5;y++){
-      if(post){add(x,y,z,LG,1);continue}
+      if(post){add(x,y,z,LG,3);continue}
       if(x===3&&z===8&&y<=2)continue;
-      if(mw.has(x+','+z)&&(y===2||y===3))add(x,y,z,'Glass Pane',6);else add(x,y,z,TC,2)}}
+      if(mw.has(x+','+z)&&(y===2||y===3))add(x,y,z,'Glass Pane',8);else add(x,y,z,TC,5)}}
   const wg2=new Set(['10,6','13,3','13,5']),wg1=new Set(['8,6','12,6']);
   for(let x=7;x<=13;x++)for(let z=2;z<=6;z++){
     if(!wingEdge(x,z))continue;
     const post=(x%2===1&&(z===2||z===6))||(x===13&&z===4),k=x+','+z;
     for(let y=1;y<=3;y++){
-      if(post){add(x,y,z,LG,1);continue}
-      if((wg2.has(k)&&y>=2)||(wg1.has(k)&&y===3))add(x,y,z,'Glass Pane',6);else add(x,y,z,TC,2)}}
+      if(post){add(x,y,z,LG,4);continue}
+      if((wg2.has(k)&&y>=2)||(wg1.has(k)&&y===3))add(x,y,z,'Glass Pane',8);else add(x,y,z,TC,6)}}
   [0,8].forEach(z=>{
-    for(let x=1;x<=5;x++)add(x,6,z,TC,2);
-    for(let x=2;x<=4;x++){const gw=x!==3&&z===8;add(x,7,z,gw?'Glass Pane':TC,gw?6:2)}
-    add(3,8,z,TC,2)});
-  for(let z=3;z<=5;z++)add(13,4,z,TC,2);
-  add(13,5,4,TC,2);
+    for(let x=1;x<=5;x++)add(x,6,z,TC,7);
+    for(let x=2;x<=4;x++){const gw=x!==3&&z===8;add(x,7,z,gw?'Glass Pane':TC,gw?8:7)}
+    add(3,8,z,TC,7)});
+  for(let z=3;z<=5;z++)add(13,4,z,TC,7);
+  add(13,5,4,TC,7);
   [[0,6,1],[6,6,-1],[1,7,1],[5,7,-1],[2,8,1],[4,8,-1]].forEach(r=>{
-    for(let z=0;z<=8;z++){const ed=z===0||z===8;add(r[0],r[1],z,ed?'Stone Brick Stairs':'Dark Oak Stairs',ed?3:4,{f:[r[2],0]})}});
-  for(let z=0;z<=8;z++)if(z!==1&&z!==2)add(3,9,z,'Dark Oak Planks',z===0||z===8?3:4);
+    const cover=r[1]===6?11:r[1]===7?12:13;
+    for(let z=0;z<=8;z++){const ed=z===0||z===8;add(r[0],r[1],z,ed?'Stone Brick Stairs':'Dark Oak Stairs',ed?9:cover,{f:[r[2],0]})}});
+  for(let z=0;z<=8;z++)if(z!==1&&z!==2)add(3,9,z,'Dark Oak Planks',z===0||z===8?9:13);
   [[2,4,1],[6,4,-1],[3,5,1],[5,5,-1]].forEach(r=>{
-    for(let x=7;x<=13;x++){const ed=x===13;add(x,r[1],r[0],ed?'Stone Brick Stairs':'Dark Oak Stairs',ed?3:4,{f:[0,r[2]]})}});
-  for(let x=7;x<=13;x++)add(x,6,4,'Dark Oak Planks',x===13?3:4);
-  [9,11].forEach(z=>[1,4].forEach(x=>{for(let y=1;y<=3;y++)add(x,y,z,LG,2)}));
+    for(let x=7;x<=13;x++){const ed=x===13;add(x,r[1],r[0],ed?'Stone Brick Stairs':'Dark Oak Stairs',ed?10:14,{f:[0,r[2]]})}});
+  for(let x=7;x<=13;x++)add(x,6,4,'Dark Oak Planks',x===13?10:14);
+  [9,11].forEach(z=>[1,4].forEach(x=>{for(let y=1;y<=3;y++)add(x,y,z,LG,15)}));
   for(let z=9;z<=11;z++){
-    add(1,4,z,'Oak Stairs',4,{f:[1,0]});add(4,4,z,'Oak Stairs',4,{f:[-1,0]});
-    add(2,5,z,'Oak Stairs',4,{f:[1,0]});add(3,5,z,'Oak Stairs',4,{f:[-1,0]})}
-  for(let y=9;y<=15;y++){add(3,y,1,'Smooth Sandstone',5);add(3,y,2,'Smooth Sandstone',5)}
-  add(2,4,10,'Lantern',6,{h:1});add(3,4,10,'Lantern',6,{h:1});
-  add(8,0,7,'Lantern',6,{h:-1});add(12,0,7,'Lantern',6,{h:-1});
-  for(let y=0;y<=3;y++)add(-2,y,10,LG,7);
-  add(-2,4,10,'Lantern',7,{h:-1});
-  [[7,8],[8,8],[11,8]].forEach(c=>add(c[0],0,c[1],'Barrel',7));
-  [[5,9],[5,10],[6,9],[9,8],[13,8],[-1,5]].forEach(c=>add(c[0],0,c[1],'Oak Leaves',7));
+    add(1,4,z,'Oak Stairs',16,{f:[1,0]});add(4,4,z,'Oak Stairs',16,{f:[-1,0]});
+    add(2,5,z,'Oak Stairs',16,{f:[1,0]});add(3,5,z,'Oak Stairs',16,{f:[-1,0]})}
+  for(let y=9;y<=15;y++){const st=y<=11?17:18;add(3,y,1,'Smooth Sandstone',st);add(3,y,2,'Smooth Sandstone',st)}
+  add(2,4,10,'Lantern',19,{h:1});add(3,4,10,'Lantern',19,{h:1});
+  add(8,0,7,'Lantern',19,{h:-1});add(12,0,7,'Lantern',19,{h:-1});
+  for(let y=0;y<=3;y++)add(-2,y,10,LG,20);
+  add(-2,4,10,'Lantern',20,{h:-1});
+  [[7,8],[8,8],[11,8]].forEach(c=>add(c[0],0,c[1],'Barrel',21));
+  [[5,9],[5,10],[6,9],[9,8],[13,8],[-1,5]].forEach(c=>add(c[0],0,c[1],'Oak Leaves',21));
 })}
 function aldercrestModel(){return mdl(add=>{
   const SB='Stone Bricks',LG='Oak Log',PL='Oak Planks',GL='Glass Pane',RS='Red Nether Brick Stairs',RB='Red Nether Bricks';
   const mE=(x,z)=>x===0||x===8||z===0||z===7,wE=(x,z)=>x===14||z===0||z===6;
-  for(let x=0;x<=8;x++)for(let z=0;z<=7;z++){add(x,0,z,SB,0);if(mE(x,z))add(x,1,z,SB,0)}
-  for(let x=9;x<=14;x++)for(let z=0;z<=6;z++){add(x,0,z,SB,0);if(wE(x,z))add(x,1,z,SB,0)}
-  for(let x=4;x<=8;x++)for(let z=8;z<=10;z++)add(x,0,z,SB,0);
-  for(let x=0;x<=3;x++)add(x,0,8,'Stone Brick Stairs',0,{f:[0,-1]});
-  for(let z=1;z<=6;z++)add(-1,0,z,'Stone Brick Stairs',0,{f:[1,0]});
+  /* step map: 0-1 floor, porch slab and steps | 2 base wall | 3-4 posts | 5 beams | 6-7 ground walls and windows | 8-9 upper floor and brackets | 10-12 upper posts, walls, windows | 13-17 roofs | 18 flower boxes | 19-21 porch | 22 lanterns */
+  for(let x=0;x<=8;x++)for(let z=0;z<=7;z++){add(x,0,z,SB,0);if(mE(x,z))add(x,1,z,SB,2)}
+  for(let x=9;x<=14;x++)for(let z=0;z<=6;z++){add(x,0,z,SB,0);if(wE(x,z))add(x,1,z,SB,2)}
+  for(let x=4;x<=8;x++)for(let z=8;z<=10;z++)add(x,0,z,SB,1);
+  for(let x=0;x<=3;x++)add(x,0,8,'Stone Brick Stairs',1,{f:[0,-1]});
+  for(let z=1;z<=6;z++)add(-1,0,z,'Stone Brick Stairs',1,{f:[1,0]});
   const mp=(x,z)=>(x%2===0&&(z===0||z===7))||((x===0||x===8)&&z%2===0);
   const mw=new Set(['1,7','3,7','7,7','1,0','3,0','5,0','7,0','0,1','0,3','0,5']);
   for(let x=0;x<=8;x++)for(let z=0;z<=7;z++){
     if(!mE(x,z))continue;
-    if(mp(x,z)){for(let y=2;y<=5;y++)add(x,y,z,LG,0);continue}
-    add(x,5,z,LG,1);
-    for(let y=2;y<=4;y++){if(x===5&&z===7&&y<=3)continue;add(x,y,z,mw.has(x+','+z)&&y>=3?GL:PL,1)}}
+    if(mp(x,z)){for(let y=2;y<=5;y++)add(x,y,z,LG,3);continue}
+    add(x,5,z,LG,5);
+    for(let y=2;y<=4;y++){if(x===5&&z===7&&y<=3)continue;const g=mw.has(x+','+z)&&y>=3;add(x,y,z,g?GL:PL,g?7:6)}}
   const wp=(x,z)=>(x%2===0&&(z===0||z===6))||(x===9&&(z===0||z===6))||(x===14&&z%2===0);
   const ww=new Set(['11,6','13,6','11,0','13,0','14,1','14,3','14,5']);
   for(let x=9;x<=14;x++)for(let z=0;z<=6;z++){
     if(!wE(x,z))continue;
-    if(wp(x,z)){for(let y=2;y<=5;y++)add(x,y,z,LG,0);continue}
-    add(x,5,z,LG,1);
-    for(let y=2;y<=4;y++)add(x,y,z,ww.has(x+','+z)&&y>=3?GL:PL,1)}
-  for(let x=-1;x<=8;x++)for(let z=0;z<=8;z++)add(x,6,z,PL,2);
-  for(let x=9;x<=14;x++)for(let z=0;z<=7;z++)add(x,6,z,PL,2);
-  [0,2,4,6,8].forEach(x=>add(x,5,8,LG,2));
-  [0,2,4,6,8].forEach(z=>add(-1,5,z,LG,2));
-  [10,12,14].forEach(x=>add(x,5,7,LG,2));
+    if(wp(x,z)){for(let y=2;y<=5;y++)add(x,y,z,LG,4);continue}
+    add(x,5,z,LG,5);
+    for(let y=2;y<=4;y++){const g=ww.has(x+','+z)&&y>=3;add(x,y,z,g?GL:PL,g?7:6)}}
+  for(let x=-1;x<=8;x++)for(let z=0;z<=8;z++)add(x,6,z,PL,8);
+  for(let x=9;x<=14;x++)for(let z=0;z<=7;z++)add(x,6,z,PL,8);
+  [0,2,4,6,8].forEach(x=>add(x,5,8,LG,9));
+  [0,2,4,6,8].forEach(z=>add(-1,5,z,LG,9));
+  [10,12,14].forEach(x=>add(x,5,7,LG,9));
   const up=(x,z)=>((x===-1||x===8)&&(z===0||z===8))||((z===0||z===8)&&x>=0&&x%2===0)||((x===-1||x===8)&&z%2===0);
   for(let x=-1;x<=8;x++)for(let z=0;z<=8;z++){
     if(!(x===-1||x===8||z===0||z===8))continue;
-    if(up(x,z)){for(let y=7;y<=9;y++)add(x,y,z,LG,2);continue}
+    if(up(x,z)){for(let y=7;y<=9;y++)add(x,y,z,LG,10);continue}
     const win=((z===0||z===8)&&x%2!==0)||(x===-1&&z%2!==0);
-    for(let y=7;y<=9;y++)add(x,y,z,win&&y===8?GL:PL,2)}
+    for(let y=7;y<=9;y++){const g=win&&y===8;add(x,y,z,g?GL:PL,g?12:11)}}
   const wup=(x,z)=>(x%2===0&&(z===0||z===7))||(x===9&&(z===0||z===7))||(x===14&&z%2===0);
   const wuw=new Set(['11,7','13,7','11,0','13,0','14,1','14,3','14,5']);
   for(let x=9;x<=14;x++)for(let z=0;z<=7;z++){
     if(!(x===14||z===0||z===7))continue;
     for(let y=7;y<=8;y++){
-      if(wup(x,z))add(x,y,z,LG,2);else add(x,y,z,wuw.has(x+','+z)&&y===8?GL:PL,2)}}
+      if(wup(x,z))add(x,y,z,LG,10);else{const g=wuw.has(x+','+z)&&y===8;add(x,y,z,g?GL:PL,g?12:11)}}}
   [[-1,10,1],[8,10,-1],[0,11,1],[7,11,-1],[1,12,1],[6,12,-1],[2,13,1],[5,13,-1]].forEach(r=>{
-    for(let z=0;z<=8;z++)add(r[0],r[1],z,z===8?'Oak Stairs':RS,3,{f:[r[2],0]})});
-  for(let z=0;z<=8;z++)[3,4].forEach(x=>add(x,14,z,RB,3));
+    for(let z=0;z<=8;z++)add(r[0],r[1],z,z===8?'Oak Stairs':RS,r[1]<=11?14:15,{f:[r[2],0]})});
+  for(let z=0;z<=8;z++)[3,4].forEach(x=>add(x,14,z,RB,15));
   [0,8].forEach(z=>{
-    for(let x=0;x<=7;x++)add(x,10,z,PL,3);
-    for(let x=1;x<=6;x++)add(x,11,z,PL,3);
-    for(let x=2;x<=5;x++)add(x,12,z,PL,3);
-    for(let x=3;x<=4;x++)add(x,13,z,PL,3)});
+    for(let x=0;x<=7;x++)add(x,10,z,PL,13);
+    for(let x=1;x<=6;x++)add(x,11,z,PL,13);
+    for(let x=2;x<=5;x++)add(x,12,z,PL,13);
+    for(let x=3;x<=4;x++)add(x,13,z,PL,13)});
   [[9,9,1],[14,9,-1],[10,10,1],[13,10,-1],[11,11,1],[12,11,-1]].forEach(r=>{
-    for(let z=0;z<=7;z++)add(r[0],r[1],z,z===7?'Oak Stairs':RS,3,{f:[r[2],0]})});
+    for(let z=0;z<=7;z++)add(r[0],r[1],z,z===7?'Oak Stairs':RS,17,{f:[r[2],0]})});
   [0,7].forEach(z=>{
-    for(let x=10;x<=13;x++)add(x,9,z,PL,3);
-    for(let x=11;x<=12;x++)add(x,10,z,PL,3)});
-  [1,3,5,7].forEach(x=>{add(x,7,9,'Oak Trapdoor',4);add(x,8,9,'Rose Bush',4)});
-  [11,13].forEach(x=>{add(x,7,8,'Oak Trapdoor',4);add(x,8,8,'Rose Bush',4)});
-  [1,3,7].forEach(x=>{add(x,2,8,'Oak Trapdoor',4);add(x,3,8,'Rose Bush',4)});
-  [11,13].forEach(x=>{add(x,2,7,'Oak Trapdoor',4);add(x,3,7,'Rose Bush',4)});
-  [4,8].forEach(x=>{for(let y=1;y<=3;y++)add(x,y,10,LG,4)});
-  for(let x=4;x<=8;x++){add(x,4,10,RS,4,{f:[0,-1]});add(x,5,9,RS,4,{f:[0,-1]});add(x,4,9,RB,4)}
-  [[5,11],[6,11],[5,12],[6,12]].forEach(c=>add(c[0],0,c[1],'Bricks',4));
-  [5,7].forEach(x=>add(x,3,10,'Lantern',5,{h:1}));
-  [1,3,5,7].forEach(x=>add(x,5,8,'Lantern',5,{h:1}));
-  [3,5].forEach(z=>add(-1,5,z,'Lantern',5,{h:1}));
+    for(let x=10;x<=13;x++)add(x,9,z,PL,16);
+    for(let x=11;x<=12;x++)add(x,10,z,PL,16)});
+  [1,3,5,7].forEach(x=>{add(x,7,9,'Oak Trapdoor',18);add(x,8,9,'Rose Bush',18)});
+  [11,13].forEach(x=>{add(x,7,8,'Oak Trapdoor',18);add(x,8,8,'Rose Bush',18)});
+  [1,3,7].forEach(x=>{add(x,2,8,'Oak Trapdoor',18);add(x,3,8,'Rose Bush',18)});
+  [11,13].forEach(x=>{add(x,2,7,'Oak Trapdoor',18);add(x,3,7,'Rose Bush',18)});
+  [4,8].forEach(x=>{for(let y=1;y<=3;y++)add(x,y,10,LG,19)});
+  for(let x=4;x<=8;x++){add(x,4,10,RS,20,{f:[0,-1]});add(x,5,9,RS,20,{f:[0,-1]});add(x,4,9,RB,20)}
+  [[5,11],[6,11],[5,12],[6,12]].forEach(c=>add(c[0],0,c[1],'Bricks',21));
+  [5,7].forEach(x=>add(x,3,10,'Lantern',22,{h:1}));
+  [1,3,5,7].forEach(x=>add(x,5,8,'Lantern',22,{h:1}));
+  [3,5].forEach(z=>add(-1,5,z,'Lantern',22,{h:1}));
+})}
+function manorModel(){return mdl(add0=>{
+  const used=new Set(),A=(x,y,z,b,s,o)=>{const k=x+','+y+','+z;if(used.has(k))return;used.add(k);add0(x,y,z,b,s,o)};
+  const R=8,md=(a,n)=>((a%n)+n)%n;
+  /* footprint: 15x7 main block plus a 7-wide wing out the front (+z) */
+  const fp=(x,z)=>(Math.abs(x)<=7&&Math.abs(z)<=3)||(Math.abs(x)<=3&&z>=3&&z<=7);
+  const out8=(x,z)=>{let n=0;for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)if((a||b)&&!fp(x+a,z+b))n++;return n};
+  const cells=[];for(let x=-8;x<=8;x++)for(let z=-4;z<=8;z++)if(fp(x,z)&&out8(x,z)>0)cells.push([x,z]);
+  const kind=(x,z,up)=>{
+    const n=out8(x,z),ax=Math.abs(x);
+    if(n>=5||n===1)return 'post';
+    const sz=!fp(x,z+1)?1:!fp(x,z-1)?-1:0,sx=!fp(x+1,z)?1:!fp(x-1,z)?-1:0;
+    if(sz===1&&z===7){if(x===0)return up?'bay':'door';if(ax===1)return up?'bay':'post';if(ax===2)return up?'wall':'glass'}
+    else if(sz===1&&z===3){if(ax===5)return up?'door2':'glass';if(ax===6)return up?'glass':'wall'}
+    else if(sz===-1){if(ax%4===3)return 'post';if(ax===0)return up?'glass':'door';if(ax===5)return 'glass'}
+    else if(sx!==0){if(z===0&&ax===7)return 'glass';if(ax===3&&z===5)return 'glass'}
+    return 'wall';
+  };
+  /* STEP MAP (0-based)
+     0 wall base | 1 cobble wall + pillars | 2 rail, caps, gate beam | 3 plinth | 4 door steps | 5 ground posts
+     6 main-block walls | 7 wing walls | 8 ground windows | 9 floor beam | 10 balcony decks | 11 balcony rails
+     12 upper posts | 13 main-block plaster | 14 wing plaster | 15 upper windows | 16 main gable ends
+     17-20 main roof rows 1-4 | 21 main gable trim | 22 dormer frames | 23 dormer roofs | 24 front gable end
+     25-28 wing roof rows 1-4 | 29 wing gable trim | 30 chimney | 31 porch | 32 flower pots | 33 hanging lanterns
+     34 balcony lanterns | 35 well base | 36 well roof + chains | 37 tree trunks | 38 tree crowns | 39 vegetable bed
+     40 path | 41 lamp posts + gate lanterns | 42 bushes | 43 barrels + roses */
+  const PIL=new Set(['11,-7','-11,-7','11,12','-11,12','2,12','-2,12','6,12','-6,12','0,-7','6,-7','-6,-7','11,-1','-11,-1','11,5','-11,5']);
+  const LIT=new Set(['11,-7','-11,-7','11,12','-11,12','2,12','-2,12']);
+  for(let x=-11;x<=11;x++)for(let z=-7;z<=12;z++){
+    if(!(Math.abs(x)===11||z===-7||z===12))continue;
+    if(z===12&&Math.abs(x)<=1)continue;
+    const k=x+','+z;
+    A(x,0,z,'Stone Bricks',0);
+    if(PIL.has(k)){for(let y=1;y<=3;y++)A(x,y,z,'Stone Bricks',1);if(!LIT.has(k))A(x,4,z,'Stone Brick Slab',2)}
+    else{A(x,1,z,md(x*5+z*3,6)===0?'Mossy Cobblestone':'Cobblestone',1);A(x,2,z,'Oak Fence',2)}
+  }
+  for(let x=-1;x<=1;x++)A(x,3,12,'Dark Oak Planks',2);
+  /* ground floor: main block (z<=3) and wing (z>=4) are separate wall steps */
+  cells.forEach(([x,z])=>{
+    const k=kind(x,z,false),w=z<=3?6:7;A(x,0,z,md(x*3+z*5,7)===0?'Mossy Stone Bricks':'Stone Bricks',3);
+    for(let y=1;y<=3;y++){
+      if(k==='post')A(x,y,z,'Dark Oak Log',5);
+      else if(k==='door'){if(y===3)A(x,y,z,'Dark Oak Planks',w)}
+      else if(k==='glass'&&y>=2)A(x,y,z,'Glass Pane',8);
+      else A(x,y,z,md(x*7+y*5+z*13,11)<=1?'Mossy Cobblestone':'Cobblestone',w)}
+  });
+  for(let x=-1;x<=1;x++)A(x,0,8,'Oak Stairs',4,{f:[0,-1]});
+  A(0,0,-4,'Oak Stairs',4,{f:[0,1]});
+  /* floor beam, balconies */
+  cells.forEach(([x,z])=>A(x,4,z,'Dark Oak Planks',9));
+  [1,-1].forEach(s=>{
+    for(let x=4;x<=7;x++)for(let z=4;z<=5;z++)A(s*x,4,z,'Oak Planks',10);
+    [4,7].forEach(x=>{for(let y=0;y<=3;y++)A(s*x,y,5,'Dark Oak Log',10)});
+    for(let x=4;x<=7;x++)A(s*x,5,5,'Oak Fence',11);
+    for(let z=4;z<=5;z++)A(s*7,5,z,'Oak Fence',11);
+  });
+  /* upper floor */
+  cells.forEach(([x,z])=>{
+    const k=kind(x,z,true),w=z<=3?13:14;
+    for(let y=5;y<=7;y++){
+      if(k==='post')A(x,y,z,'Dark Oak Log',12);
+      else if(k==='door2'){if(y===7)A(x,y,z,'Dark Oak Planks',w)}
+      else if((k==='glass'||k==='bay')&&y>=6)A(x,y,z,'Glass Pane',15);
+      else A(x,y,z,'Smooth Sandstone',w)}
+  });
+  /* roofs: sf(k,verge) gives the step for roof row k (0=eaves) */
+  const roof=(map,fv,u0,u1,sf,skip,verges)=>{
+    for(let k=0;k<4;k++){const d=4-k;
+      for(let u=u0;u<=u1;u++){
+        const vg=verges.includes(u),s=sf(k,vg);
+        [-1,1].forEach(t=>{const p=map(u,t*d);if(!skip(p[0],R+k,p[1]))A(p[0],R+k,p[1],vg?'Cobblestone Stairs':'Spruce Stairs',s,{f:fv(t)})});
+        (d>1?[-1,1]:[0]).forEach(t=>{const p=map(u,t*(d-1));if(!skip(p[0],R+k,p[1]))A(p[0],R+k,p[1],vg?'Cobblestone':'Spruce Planks',s)});
+      }}
+  };
+  const gfill=(map,u,s)=>{for(let k=0;k<3;k++)for(let v=-(2-k);v<=2-k;v++){const p=map(u,v);A(p[0],R+k,p[1],k===1&&v===0?'Glass Pane':'Smooth Sandstone',s)}};
+  const mainMap=(u,v)=>[u,v],wingMap=(u,v)=>[v,u];
+  gfill(mainMap,-7,16);gfill(mainMap,7,16);
+  roof(mainMap,t=>[0,-t],-8,8,(k,vg)=>vg?21:17+k,()=>false,[-8,8]);
+  /* dormers: two on the front slope, three on the back */
+  const dormer=(cx,sg)=>{
+    [-1,1].forEach(d=>A(cx+d,10,3*sg,'Dark Oak Log',22));A(cx,10,3*sg,'Glass Pane',22);
+    [-1,0,1].forEach(d=>{
+      A(cx+d,11,3*sg,d===0?'Cobblestone':'Cobblestone Stairs',23,d===0?undefined:{f:[-d,0]});
+      A(cx+d,11,2*sg,d===0?'Spruce Planks':'Spruce Stairs',23,d===0?undefined:{f:[-d,0]})});
+  };
+  [6,-6].forEach(cx=>dormer(cx,1));[-5,0,5].forEach(cx=>dormer(cx,-1));
+  /* front cross gable */
+  const inMain=(x,y,z)=>Math.abs(z)<=4&&y<=R+3-Math.max(Math.abs(z)-1,0);
+  gfill(wingMap,7,24);
+  roof(wingMap,t=>[-t,0],1,8,(k,vg)=>vg?29:25+k,(x,y,z)=>z<=4&&inMain(x,y,z),[8]);
+  /* chimney */
+  for(let x=-5;x<=-4;x++)for(let z=-1;z<=0;z++){A(x,12,z,'Stone Bricks',30);A(x,13,z,'Stone Bricks',30);A(x,14,z,'Dark Oak Log',30)}
+  /* porch */
+  [-2,2].forEach(x=>{for(let y=0;y<=3;y++)A(x,y,9,'Dark Oak Log',31)});
+  for(let x=-2;x<=2;x++){A(x,4,9,'Dark Oak Planks',31);A(x,4,8,'Dark Oak Planks',31);A(x,5,8,'Spruce Planks',31);A(x,5,9,'Spruce Stairs',31,{f:[0,-1]})}
+  /* flower pots: upper windows + balcony */
+  cells.forEach(([x,z])=>{
+    if(kind(x,z,true)!=='glass')return;
+    const sz=!fp(x,z+1)?1:!fp(x,z-1)?-1:0,sx=!fp(x+1,z)?1:!fp(x-1,z)?-1:0;
+    if(sz&&!sx)A(x,5,z+sz,'Flower Pot',32);else if(sx&&!sz)A(x+sx,5,z,'Flower Pot',32)});
+  [1,-1].forEach(s=>{A(s*5,5,4,'Flower Pot',32);A(s*6,5,4,'Flower Pot',32)});
+  /* lanterns: hanging (33), then standing on the balcony rails (34) */
+  [-1,1].forEach(x=>A(x,3,9,'Lantern',33,{h:1}));
+  [[8,4],[-8,4],[8,-4],[-8,-4]].forEach(p=>A(p[0],7,p[1],'Lantern',33,{h:1}));
+  [5,-5].forEach(x=>A(x,3,5,'Lantern',33,{h:1}));
+  [1,-1].forEach(s=>{A(s*7,6,5,'Lantern',34,{h:-1});A(s*4,6,5,'Lantern',34,{h:-1})});
+  /* well */
+  const wx=-7,wz=9;
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)A(wx+dx,0,wz+dz,dx||dz?'Cobblestone':'Water',35);
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(p=>{A(wx+p[0],1,wz+p[1],'Oak Fence',36);A(wx+p[0],2,wz+p[1],'Oak Fence',36)});
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+    if(!dx&&!dz){A(wx,3,wz,'Spruce Planks',36);A(wx,4,wz,'Spruce Slab',36)}
+    else A(wx+dx,3,wz+dz,'Spruce Stairs',36,{f:Math.abs(dx)>=Math.abs(dz)?[-dx,0]:[0,-dz]})}
+  A(wx,2,wz,'Chain',36);A(wx,1,wz,'Chain',36);
+  /* trees */
+  const tree=(tx,tz)=>{
+    for(let y=0;y<=3;y++)A(tx,y,tz,'Oak Log',37);
+    for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++)for(let dz=-2;dz<=2;dz++){
+      if(dx*dx+dy*dy+dz*dz>5)continue;
+      A(tx+dx,4+dy,tz+dz,md(dx*3+dy*5+dz*7,9)===0?'Flowering Azalea Leaves':'Oak Leaves',38)}
+  };
+  tree(9,9);tree(-9,-4);
+  /* vegetable bed */
+  for(let x=6;x<=10;x++)for(let z=-6;z<=-4;z++){
+    if(x===8&&z===-5)A(x,0,z,'Water',39);else{A(x,0,z,'Farmland',39);A(x,1,z,'Wheat',39)}}
+  /* path */
+  for(let x=-1;x<=1;x++)for(let z=9;z<=12;z++)A(x,0,z,'Cobblestone Slab',40);
+  /* lamp posts and gate lanterns */
+  [-2,2].forEach(x=>{A(x,0,10,'Oak Fence',41);A(x,1,10,'Oak Fence',41);A(x,2,10,'Lantern',41,{h:-1})});
+  A(0,4,12,'Lantern',41,{h:-1});
+  LIT.forEach(k=>{const p=k.split(',').map(Number);A(p[0],4,p[1],'Lantern',41,{h:-1})});
+  /* bushes (42), barrels and roses (43) */
+  [1,-1].forEach(s=>A(s*2,0,8,'Barrel',43));
+  const bush=(x,z,h,az)=>{for(let y=0;y<h;y++)A(x,y,z,y===h-1&&az?'Flowering Azalea Leaves':'Oak Leaves',42)};
+  [[-5,9,1,0],[5,9,1,1],[-4,8,1,1],[4,8,1,0],[-9,5,2,0],[9,5,2,1],[0,-5,2,0],[-3,-5,1,1],[3,-5,1,1],[-6,-5,1,0],[-9,0,1,1],[9,1,1,1],[-10,-1,2,0],[10,3,2,1]].forEach(b=>bush(b[0],b[1],b[2],b[3]));
+  [[-3,9],[3,9],[8,-1],[-8,2]].forEach(p=>A(p[0],0,p[1],'Rose Bush',43));
 })}
 function fillCounts(b){
   const f=MODELS[b.id];if(!f||APPROX.has(b.id))return;const V=f();
-  b.steps.forEach((st,i)=>{
+  b.tall=Math.max(...V.map(v=>v.y))-Math.min(...V.map(v=>v.y))+1;
+  b.steps.forEach((st,i)=>{st[3]=(MEAS[b.id]||[])[i]||[];
     const c={};V.filter(v=>v.s===i).forEach(v=>{c[v.b]=(c[v.b]||0)+1});
     const old=st[2].map(m=>m[0]).filter(n=>c[n]),add=Object.keys(c).filter(n=>!old.includes(n));
     st[2]=[...old,...add].map(n=>[n,c[n]])})}
-const MODELS={"cozy-cottage":cottageModel,"starter-farm":farmModel,"medieval-watchtower":towerModel,"treehouse-hideaway":treeModel,"cherry-pagoda":pagodaModel,"mushroom-house":mushModel,"cosy-woodland-lodge":lodgeModel,"aldercrest-house":aldercrestModel};
+const MODELS={"brindlewood-manor":manorModel,"cozy-cottage":cottageModel,"starter-farm":farmModel,"medieval-watchtower":towerModel,"treehouse-hideaway":treeModel,"cherry-pagoda":pagodaModel,"sakura-teahouse":sakuraModel,"terrace-farm":terraceModel,"mushroom-house":mushModel,"cosy-woodland-lodge":lodgeModel,"aldercrest-house":aldercrestModel};
 const APPROX=new Set(["aldercrest-house","cosy-woodland-lodge"]);
 BUILDS.forEach(fillCounts);
