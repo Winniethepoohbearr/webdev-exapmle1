@@ -5,7 +5,7 @@ const tagsAll=[...new Set(BUILDS.flatMap(b=>b.tags))].sort();
 const blocksOf=b=>[...new Set(b.steps.flatMap(s=>s[2].map(m=>m[0])))];
 const sw=n=>`<i class="sw" style="background:${(B[n]||["#999"])[0]}"></i>`;
 const bi=b=>BUILDS.indexOf(b);
-const meta=b=>[b.diff,b.time&&"about "+b.time,b.size&&b.size+" footprint",MODELS[b.id]&&(APPROX.has(b.id)?"rough 3D shape":"3D guide")].filter(Boolean).join(", ");
+const meta=b=>[b.diff,b.time&&"about "+b.time,b.size&&b.size+" footprint",b.tall&&b.tall+" tall",MODELS[b.id]&&(APPROX.has(b.id)?"rough 3D shape":"3D guide")].filter(Boolean).join(", ");
 const here=()=>location.hash.slice(1)||'home';
 let dbOn=false,sortLikes=false,counts={},mine=new Set(),uid=null,canW=false,db0=null,local=new Set(),tt;
 try{local=new Set(JSON.parse(localStorage.getItem('pb-likes')||'[]'))}catch(e){}
@@ -148,8 +148,8 @@ function build(id){
   <div class="chips" style="margin-top:8px">${b.tags.map(t=>`<button class="chip" data-act="tag" data-v="${t}">${t}</button>`).join('')}</div>
   ${b.note?`<p class="lab" style="margin-top:18px">${b.note}</p>`:""}
   ${view3(b)}
-  <div class="two"><div><p class="lab" id="pt">0 of ${b.steps.length} steps done</p><div class="prog"><div id="pb"></div></div>
-  ${b.steps.map((s,i)=>`<div class="srow"><div class="n" aria-hidden="true">${i+1}</div><div><label><input type="checkbox" data-step><h3>${s[0]}</h3></label><p>${s[1]}</p><div class="chips" style="margin-top:0">${s[2].map(([n,c])=>`<button class="chip" data-act="block" data-v="${n}">${sw(n)}${n}${c?" × "+c:""}</button>`).join('')}</div></div></div>`).join('')}</div>
+  <div class="two"><div><p class="lab" id="pt">0 of ${b.steps.length} steps done</p><div class="prog"><div id="pb"></div></div>${b.steps.some(s=>s[3]&&s[3].length)?`<p class="lab" style="margin:14px 0 0">Measurements are in blocks. “Wide” runs left to right across the front, “deep” runs front to back, and layer 1 is the bottom row of the build, with each layer sitting on top of the one before.</p>`:""}
+  ${b.steps.map((s,i)=>`<div class="srow"><div class="n" aria-hidden="true">${i+1}</div><div><label><input type="checkbox" data-step><h3>${s[0]}</h3></label><p>${s[1]}</p>${s[3]&&s[3].length?`<p class="meas"><span class="ml">Measure</span>${s[3].map(m=>`<span>${m.replace(/(\d+(?:\s?[×–]\s?\d+)*)/g,'<b>$1</b>')}</span>`).join('')}</p>`:''}<div class="chips" style="margin-top:0">${s[2].map(([n,c])=>`<button class="chip" data-act="block" data-v="${n}">${sw(n)}${n}${c?" × "+c:""}</button>`).join('')}</div></div></div>`).join('')}</div>
   <aside class="side"><h3>Materials list</h3>${Object.entries(tot).map(([n,c])=>`<button class="mat" data-act="block" data-v="${n}">${sw(n)}${n}<b>${c||""}</b></button>`).join('')}</aside></div>${cmSection(b)}`;
   init3d(b.id);paintC();
 }
