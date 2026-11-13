@@ -51,6 +51,20 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:va
 @media (max-width:860px){.two{grid-template-columns:1fr;gap:28px}}
 .prog{height:6px;border-radius:99px;background:var(--tint);overflow:hidden;margin:8px 0 22px}
 .prog div{height:100%;width:0;background:var(--accent);transition:width .3s}
+.resume{margin:22px 0 0}
+.resume .rb{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;padding:16px 20px;border:1px solid var(--line);border-radius:20px;background:var(--tint)}
+.resume .rb p{margin:0;flex:1 1 280px}
+.resume .rbtn{display:flex;gap:10px;flex-wrap:wrap}
+.resume .chip.pri{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:500}
+.resume .warn{margin:12px 0 0}
+.srow.nxt .n::after{content:"Up next";display:block;font-size:11px;line-height:1;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-top:8px;font-weight:500}
+.cont{margin:6px 0 10px}
+.controw{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.cont-i{display:block;text-align:left;background:var(--tint);border:1px solid var(--line);border-radius:18px;padding:14px 16px}
+.cont-i:hover{border-color:var(--accent)}
+.cont-i .cn{display:block;font-size:20px;font-weight:400;margin-bottom:2px}
+.cont-i .prog{display:block;margin:10px 0 0;background:var(--line)}
+.cont-i .prog span{display:block;height:100%;background:var(--accent)}
 .srow{display:grid;grid-template-columns:64px 1fr;gap:6px;padding:24px 0;border-top:1px solid var(--line)}
 .srow .n{font-size:44px;line-height:1;font-weight:300;color:var(--num)}
 .srow label{display:flex;gap:12px;align-items:center;cursor:pointer}
@@ -86,7 +100,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:va
 .v3{margin:30px 0 0;border:1px solid var(--line);border-radius:26px;padding:18px;background:var(--surface)}
 .v3box{border-radius:18px;background:linear-gradient(180deg,#7fbff0 0%,#b9dcf6 60%,#e0f0fb 100%);overflow:hidden}
 :root[data-theme="dark"] .v3box{background:linear-gradient(180deg,#16244d 0%,#2b4474 60%,#4d6c9c 100%)}
-.v3box canvas{display:block;width:100%;cursor:grab}
+.v3box canvas{display:block;width:100%;cursor:grab}.v3box{position:relative}.v3box::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 70px rgba(30,20,50,.2)}
 .v3bar{margin-top:14px}
 .v3bar>.lab{margin:0;min-height:2.8em;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .v3cap{display:grid;margin-top:8px}
