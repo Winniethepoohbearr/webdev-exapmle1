@@ -122,11 +122,11 @@ function art(b){
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges" aria-hidden="true">${o}</svg><span class="em" aria-hidden="true">${b.emoji}</span>`;
 }
 const tagChips=()=>(dbOn?`<button class="chip" data-act="sort" aria-pressed="${sortLikes}">Most liked first</button>`:'')+tagsAll.map(t=>`<button class="chip" data-act="tag" data-v="${t}" aria-pressed="${t===tag}">${t}</button>`).join('');
-function row(b,k){return `<article class="row${k%2?' flip':''}"><button class="img"${b.pr?` style="aspect-ratio:${b.pr[0]}"`:""} data-act="go" data-v="build-${b.id}" aria-label="Open ${b.name}">${art(b)}</button><div><p class="lab">${b.tags.join(', ')}</p><h2>${b.name}</h2><p>${b.desc}</p><p class="lab">${meta(b)}</p><div class="acts"><button class="go" data-act="go" data-v="build-${b.id}">See the steps</button>${likeBtn(b.id)}</div></div></article>`}
+function row(b,k){return `<article class="row${k%2?' flip':''}"><button class="img"${b.pr?` style="aspect-ratio:${b.pr[0]}"`:""} data-act="go" data-v="build-${b.id}" aria-label="Open ${b.name}">${art(b)}</button><div><p class="lab">${b.tags.join(', ')}</p><h2>${b.name}</h2><p>${b.desc}</p><p class="lab">${meta(b)}</p>${progLine(b)}<div class="acts"><button class="go" data-act="go" data-v="build-${b.id}">${progBtn(b)}</button>${likeBtn(b.id)}</div></div></article>`}
 function home(){
   app.innerHTML=`<section class="hero"><h1>Find your next build</h1><p>Pick a build, follow the steps, and gather the blocks as you go.</p>
   <div class="search" role="search"><input id="q" type="search" placeholder="Search builds, tags or blocks" aria-label="Search builds, tags or blocks" autocomplete="off"></div>
-  <div class="chips" id="tagrow" aria-label="Tags"></div></section><div id="res"></div>`;
+  <div class="chips" id="tagrow" aria-label="Tags"></div></section>${contStrip()}<div id="res"></div>`;
   $('#q').value=q;results();
 }
 function results(){
@@ -138,6 +138,88 @@ function results(){
   (on?`<p style="margin-top:24px"><button class="go" data-act="clear">Clear search and tags</button></p>`:'');
   $('#tagrow').innerHTML=tagChips();
 }
+/* ---------- progress tracker: remembers ticked steps and where you were ---------- */
+let prog={},progOK=true;
+try{const r=JSON.parse(localStorage.getItem('pb-progress')||'{}');if(r&&typeof r==='object'&&!Array.isArray(r))prog=r;localStorage.setItem('pb-ptest','1');localStorage.removeItem('pb-ptest')}catch(e){progOK=false}
+function progWrite(){try{localStorage.setItem('pb-progress',JSON.stringify(prog));progOK=true}catch(e){progOK=false}}
+function progOf(b){
+  const N=b.steps.length,p=prog[b.id];
+  if(!p||typeof p!=='object')return{d:[],v:0,t:0};
+  const d=[...new Set((Array.isArray(p.d)?p.d:[]).filter(n=>Number.isInteger(n)&&n>=1&&n<=N))].sort((x,y)=>x-y);
+  return{d,v:Number.isInteger(p.v)&&p.v>=1&&p.v<=N?p.v:0,t:+p.t||0};
+}
+function progSet(b,d,v){
+  const N=b.steps.length,cur=progOf(b),nd=d||cur.d,nv=v===undefined?cur.v:v;
+  if(!nd.length&&(!nv||nv>=N))delete prog[b.id];else prog[b.id]={d:nd,v:nv,t:Date.now()};
+  progWrite();
+}
+const progNext=(b,p)=>{for(let i=1;i<=b.steps.length;i++)if(!p.d.includes(i))return i;return 0};
+const progLine=b=>{const p=progOf(b),N=b.steps.length;return p.d.length?`<p class="lab">${p.d.length===N?'You finished this build.':'Your progress: '+p.d.length+' of '+N+' steps done.'}</p>`:''};
+const progBtn=b=>{const p=progOf(b);return p.d.length&&p.d.length<b.steps.length?'Continue':'See the steps'};
+function contStrip(){
+  const L=BUILDS.map(b=>[b,progOf(b)]).filter(([b,p])=>p.d.length&&p.d.length<b.steps.length).sort((a,c)=>c[1].t-a[1].t).slice(0,3);
+  if(!L.length)return'';
+  return `<section class="cont" aria-label="Pick up where you left off"><p class="lab">Pick up where you left off</p><div class="controw">${L.map(([b,p])=>`<button class="cont-i" data-act="go" data-v="build-${b.id}"><span class="cn">${b.name}</span><span class="lab" style="margin:0">${p.d.length} of ${b.steps.length} steps done. Next is step ${progNext(b,p)}.</span><span class="prog"><span style="width:${Math.round(p.d.length/b.steps.length*100)}%"></span></span></button>`).join('')}</div></section>`;
+}
+function progBar(){
+  const all=[...document.querySelectorAll('[data-step]')],d=all.filter(x=>x.checked).length,pb=$('#pb');
+  if(!pb||!all.length)return;
+  pb.style.width=(d/all.length*100)+'%';
+  $('#pt').textContent=d===all.length?'All steps done. Enjoy your build!':`${d} of ${all.length} steps done`;
+}
+function progMark(){
+  const bx=[...document.querySelectorAll('[data-step]')],rows=[...document.querySelectorAll('.srow')],d=bx.filter(x=>x.checked).length,k=bx.findIndex(x=>!x.checked);
+  rows.forEach(r=>r.classList.remove('nxt'));
+  if(d&&k>=0&&rows[k])rows[k].classList.add('nxt');
+}
+function progBanner(b){
+  const el=$('#resume');if(!el)return;
+  const N=b.steps.length,boxes=[...document.querySelectorAll('[data-step]')],done=boxes.filter(x=>x.checked).length,p=progOf(b),k=boxes.findIndex(x=>!x.checked)+1;
+  let msg='',btns='';
+  if(N&&done===N){msg=`You’ve finished all ${N} steps. Nice work!`;btns='<button class="chip" data-pg="reset">Start over</button>'}
+  else if(done>0){msg=`Your progress is saved. You’ve done ${done} of ${N} steps. Up next is step ${k}: ${b.steps[k-1][0]}.`;btns=`<button class="chip pri" data-pg="go" data-k="${k}">Continue at step ${k}</button><button class="chip" data-pg="reset">Start over</button>`}
+  else if(p.v&&p.v<N){msg=`Last time you were looking at step ${p.v}: ${b.steps[p.v-1][0]}.`;btns=`<button class="chip pri" data-pg="go" data-k="${p.v}">Go to step ${p.v}</button>`}
+  const note=progOK?'':'<p class="lab warn">This browser won’t let the site save your progress, so your ticks will be forgotten when you leave this page.</p>';
+  el.innerHTML=(msg?`<div class="rb"><p>${msg}</p><div class="rbtn">${btns}</div></div>`:'')+note;
+}
+function progRestore(b){
+  const N=b.steps.length,p=progOf(b);
+  document.querySelectorAll('[data-step]').forEach((x,i)=>{x.checked=p.d.includes(i+1)});
+  progBar();progMark();progBanner(b);
+  const sl=$('#vs'),lb=$('#vl');
+  if(sl){
+    const k=p.d.length?progNext(b,p):p.v;
+    if(k&&k!==N){sl.value=k;sl.dispatchEvent(new Event('input',{bubbles:true}))}
+  }
+  if(lb){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{const s2=$('#vs');if(s2&&here()==='build-'+b.id)progSet(b,undefined,+s2.value)},400)}).observe(lb,{childList:true,characterData:true,subtree:true})}
+}
+function progGo(b,k){
+  const sl=$('#vs');if(sl&&k){sl.value=k;sl.dispatchEvent(new Event('input',{bubbles:true}))}
+  const row=document.querySelectorAll('.srow')[k-1];
+  if(row)row.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+}
+function progReset(b){
+  delete prog[b.id];progWrite();
+  document.querySelectorAll('[data-step]').forEach(x=>{x.checked=false});
+  progBar();progMark();progBanner(b);
+  const sl=$('#vs');if(sl){sl.value=b.steps.length;sl.dispatchEvent(new Event('input',{bubbles:true}))}
+}
+document.addEventListener('change',e=>{
+  if(!e.target.matches||!e.target.matches('[data-step]'))return;
+  const b=BUILDS.find(x=>x.id===here().slice(6));if(!b)return;
+  const d=[...document.querySelectorAll('[data-step]')].map((x,i)=>x.checked?i+1:0).filter(Boolean);
+  progSet(b,d);progMark();
+  const r=$('#resume');if(r&&(r.innerHTML.trim()||!progOK))progBanner(b);
+});
+document.addEventListener('click',e=>{
+  const t=e.target.closest&&e.target.closest('[data-pg]');if(!t)return;
+  const b=BUILDS.find(x=>x.id===here().slice(6));if(!b)return;
+  if(t.dataset.pg==='go')progGo(b,+t.dataset.k);
+  else if(t.dataset.pg==='reset'){
+    if(!t.dataset.armed){t.dataset.armed='1';t.textContent='Click again to clear';setTimeout(()=>{if(t.isConnected&&t.dataset.armed){delete t.dataset.armed;t.textContent='Start over'}},4000);return}
+    progReset(b);
+  }
+});
 function build(id){
   const b=BUILDS.find(x=>x.id===id);
   if(!b)return go('home');
@@ -147,11 +229,12 @@ function build(id){
   <h1 class="bt">${b.name}</h1><div class="acts"><span class="lab" style="margin:0">${meta(b)}</span>${likeBtn(b.id)}</div>
   <div class="chips" style="margin-top:8px">${b.tags.map(t=>`<button class="chip" data-act="tag" data-v="${t}">${t}</button>`).join('')}</div>
   ${b.note?`<p class="lab" style="margin-top:18px">${b.note}</p>`:""}
+  <div id="resume" class="resume"></div>
   ${view3(b)}
   <div class="two"><div><p class="lab" id="pt">0 of ${b.steps.length} steps done</p><div class="prog"><div id="pb"></div></div>${b.steps.some(s=>s[3]&&s[3].length)?`<p class="lab" style="margin:14px 0 0">Measurements are in blocks. “Wide” runs left to right across the front, “deep” runs front to back, and layer 1 is the bottom row of the build, with each layer sitting on top of the one before.</p>`:""}
   ${b.steps.map((s,i)=>`<div class="srow"><div class="n" aria-hidden="true">${i+1}</div><div><label><input type="checkbox" data-step><h3>${s[0]}</h3></label><p>${s[1]}</p>${s[3]&&s[3].length?`<p class="meas"><span class="ml">Measure</span>${s[3].map(m=>`<span>${m.replace(/(\d+(?:\s?[×–]\s?\d+)*)/g,'<b>$1</b>')}</span>`).join('')}</p>`:''}<div class="chips" style="margin-top:0">${s[2].map(([n,c])=>`<button class="chip" data-act="block" data-v="${n}">${sw(n)}${n}${c?" × "+c:""}</button>`).join('')}</div></div></div>`).join('')}</div>
   <aside class="side"><h3>Materials list</h3>${Object.entries(tot).map(([n,c])=>`<button class="mat" data-act="block" data-v="${n}">${sw(n)}${n}<b>${c||""}</b></button>`).join('')}</aside></div>${cmSection(b)}`;
-  init3d(b.id);paintC();
+  init3d(b.id);paintC();progRestore(b);
 }
 function blocks(){
   app.innerHTML=`<section class="hero" style="padding-bottom:18px"><h1>Block lookup</h1><p>Find a block and see which builds use it.</p>
