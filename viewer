@@ -1,7 +1,12 @@
 /* Pooh Bear: the 3D viewer (three.js r128): pixel textures, block shapes and the step slider. */
 const view3=b=>MODELS[b.id]?`<section class="v3" aria-label="3D guide"><p class="lab" style="margin:0 0 10px">${APPROX.has(b.id)?"Rough 3D shape, not an exact copy. It shows the general form and the order of the steps, but the block positions are my best guess from photos and video.":"3D guide, a simplified model built from the written steps."} Drag to rotate, scroll or pinch to zoom, and use the slider to build it step by step. The newest step is the brightest.${APPROX.has(b.id)?"":" The pink box outlines one part of the step, and the numbers underneath say how big it is, in blocks."}</p><div class="v3box"><canvas id="cv" role="img" aria-label="Interactive 3D model of ${b.name}"></canvas></div><div class="v3bar"><span id="vl" class="lab"></span><div class="v3cap" id="vc" aria-hidden="true"></div><div class="v3ctl"><button class="chip" id="vp" aria-label="Previous step">‹</button><input id="vs" type="range" aria-label="Build step" min="1" max="${b.steps.length}" value="${b.steps.length}"><button class="chip" id="vn" aria-label="Next step">›</button></div><div class="v3btns"><button class="chip" id="vr">Reset view</button>${APPROX.has(b.id)?"":'<button class="chip" id="vb">Hide box</button>'}</div></div></section>`:'';
 let v3=null;
-function stop3d(){if(v3){cancelAnimationFrame(v3.raf);v3.ro.disconnect();v3.r.dispose();v3=null}}
+/* Sky and light, shader-pack style but still blocky. Colours are 0-1 RGB; sun is the direction toward the sun. Day for light mode, dusk for dark mode. */
+const ENVS={
+ day:{sun:[-.5,.78,.62],sunCol:0xfff0d4,sunI:.66,hSky:0xc2dbff,hGnd:0xa08c68,hI:.66,zen:[.27,.5,.85],mid:[.5,.72,.95],hor:[.88,.93,.97],glowC:[1,.84,.58],glowK:.55,fog:0xdbe9f5,cloud:[1,1,1],glow:.5},
+ dusk:{sun:[-.8,.34,.5],sunCol:0xffa45c,sunI:.9,hSky:0x9a86bd,hGnd:0x6b5547,hI:.68,zen:[.24,.2,.46],mid:[.62,.42,.58],hor:[1,.72,.48],glowC:[1,.58,.28],glowK:1,fog:0xe3a88c,cloud:[1,.8,.72],glow:.85}
+};
+function stop3d(){if(v3){cancelAnimationFrame(v3.raf);v3.ro.disconnect();v3.off&&v3.off();v3.r.dispose();v3=null}}
 /* Which part of each step to outline: the biggest group of identical, touching-block pieces (all the posts, both balconies, every dormer...). */
 function focusSteps(vox,N,ovr){
   const key=v=>v.x+','+v.y+','+v.z,gy=Math.min(...vox.map(v=>v.y));
@@ -35,11 +40,10 @@ function init3d(id){
   const vox=MODELS[id](),b=BUILDS.find(x=>x.id===id),N=b.steps.length;
   const r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
   r.setPixelRatio(Math.min(devicePixelRatio||1,2));
-  const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,200);
-  /* lit like the game: every face gets a fixed shade, top 100%, front and back 80%, sides 60%, bottom 50% */
-  sc.add(new THREE.AmbientLight(0xffffff,.5));
-  const dl=new THREE.DirectionalLight(0xffffff,.59);dl.position.set(1,5,3);sc.add(dl);
-  const dm=new THREE.DirectionalLight(0xffffff,.32);dm.position.set(-1,0,-3);sc.add(dm);
+  const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,900);
+  /* lit like a shader pack on the game's blocks: a warm sun that casts soft shadows, plus cool sky light that fills the shade (set in applyEnv below) */
+  const hl=new THREE.HemisphereLight(0xffffff,0x888888,.6);sc.add(hl);
+  const dl=new THREE.DirectionalLight(0xffffff,.7);sc.add(dl);sc.add(dl.target);
   const mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9];
   vox.forEach(v=>{[v.x,v.y,v.z].forEach((c,i)=>{mn[i]=Math.min(mn[i],c);mx[i]=Math.max(mx[i],c)})});
   const sx=mx[0]-mn[0]+1,sy=mx[1]-mn[1]+1,sz=mx[2]-mn[2]+1,ext=Math.max(sx,sy,sz),tall=sy/Math.max(sx,sz)>1.2;
@@ -111,6 +115,17 @@ function init3d(id){
     csb:nz('#8a8a8a',130,.07,p=>{[0,5,10].forEach((y0,i)=>{for(let x=0;x<16;x++)p(x,y0,'rgb(98,98,98)');const o=i%2?4:10;for(let y=y0;y<Math.min(16,y0+5);y++){p(o,y,'rgb(98,98,98)');p((o+8)%16,y,'rgb(98,98,98)')}});for(let i=0;i<7;i++)p(3+i,2+i,'rgb(64,64,64)');for(let i=0;i<5;i++)p(12-i,8+i,'rgb(64,64,64)');p(9,9,'rgb(64,64,64)')}),
     bam:mk(p=>{const rf=R(131);each((x,y)=>p(x,y,(y===3||y===10)?'#55902f':(x%4===0?'#7cb83c':pick(rf,['#8ccb4a','#92d04f','#82c244']))))}),
     rmu:mk(p=>{each((x,y)=>p(x,y,'#d8322a'));[[3,3],[10,2],[7,8],[12,10],[4,12],[9,13]].forEach(c=>{p(c[0],c[1],'#f4efe6');p(c[0]+1,c[1],'#f4efe6');p(c[0],c[1]+1,'#f4efe6');p(c[0]+1,c[1]+1,'#f4efe6')})}),
+    lil:mk((p,g)=>{g.clearRect(0,0,16,16);const rf=R(141);each((x,y)=>{const dx=x-7.5,dy=y-7.5,d=Math.hypot(dx,dy);if(d>6.9)return;if(dx>.5&&Math.abs(dy)<1.4)return;
+      p(x,y,d>5.6?pick(rf,['#2f7a30','#378535','#2c722d']):Math.abs(dx*.45+dy*.9)<.7||Math.abs(dx*.9-dy*.4)<.6?pick(rf,['#59ad4c','#63b855']):pick(rf,['#3f8f3a','#46993f','#3a8736','#4aa043']))})}),
+    obs:nz('#16101f',150,.09,(p,rf)=>{for(let i=0;i<24;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#2a1d44','#3a2860','#0e0a16','#231838']))}),
+    lap:nz('#2c52ad',151,.1,(p,rf)=>{for(let i=0;i<36;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#4b78d8','#1f3b86','#e9d27a','#3a64c2']))}),
+    ame:nz('#8d63cc',152,.08,(p,rf)=>{for(let i=0;i<16;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#6e47ad','#a47ee0','#7d55bd']));for(let i=0;i<5;i++){const x=1+Math.floor(rf()*12),y=1+Math.floor(rf()*12);p(x,y,'#d2b6f7');p(x+1,y,'#b894ec');p(x,y+1,'#b08ae8')}}),
+    pcp:nz('#7a2fa0',153,.06,p=>{for(let i=0;i<16;i++){p(i,0,sh('#7a2fa0',1.2));p(i,15,sh('#7a2fa0',.8));p(0,i,sh('#7a2fa0',1.2));p(15,i,sh('#7a2fa0',.8))}}),
+    ets:mk(p=>{each((x,y)=>{if(y<3)p(x,y,y===0?'#c8323d':'#a4222e');else p(x,y,(x*7+y*3)%11===0?'#2a1d44':(x+y)%5===0?'#1d1530':'#16101f')})}),
+    ett:mk(p=>{each((x,y)=>{const e=x<1||y<1||x>14||y>14;p(x,y,e?'#7d141e':(x+y)%4===0?'#b9283a':'#a4222e')});[[1,1],[14,1],[1,14],[14,14]].forEach(c=>p(c[0],c[1],'#5fe0d8'));for(let i=4;i<12;i++){p(i,7,'#f3e9d2');p(i,8,'#f3e9d2')}p(7,5,'#f3e9d2');p(8,10,'#f3e9d2');p(7,6,'#f3e9d2');p(8,9,'#f3e9d2')}),
+    rcn:nz('#a82a2a',154,.045,(p,rf)=>{for(let i=0;i<10;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#b83232','#992222','#a02626']))}),
+    bmb:nz('#8d6a46',155,.07,(p,rf)=>{for(let i=0;i<14;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#a48058','#775a3a','#b79a74']));[[3,4],[10,3],[6,10],[12,12]].forEach(([a,b])=>{p(a,b,'#d9c6a2');p(a+1,b,'#d9c6a2')})}),
+    wl:nz('#e8ebeb',156,.05,(p,rf)=>{for(let i=0;i<46;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#f6f8f8','#d9dedf','#eef0f0','#cfd5d6']))}),
     dp:nz('#a58a56',140,.07,(p,rf)=>{for(let i=0;i<30;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#8f7646','#b89d66','#7d6740']))}),
     cd:mk(p=>{const rf=R(120);each((x,y)=>p(x,y,pick(rf,['#7d5a40','#6e4f37','#8a6448','#755339'])));for(let i=0;i<38;i++)p(Math.floor(rf()*16),Math.floor(rf()*16),pick(rf,['#9c9288','#b0a79c','#5c4331','#a58a6c']))}),
     jl:mk(p=>{const rf=R(121);each((x,y)=>p(x,y,x%4===3?'#c27418':sh('#d98a22',.95+rf()*.1)));
@@ -168,13 +183,15 @@ function init3d(id){
     'Cobblestone Stairs':lam(T.cobble),'Cobblestone Slab':lam(T.cobble),'Stone Brick Slab':lam(T.sb),'Oak Fence':lam(T.planks),'Smooth Sandstone':lam(T.ss),'Terracotta':lam(T.terr),
     'Barrel':[lam(T.barS),lam(T.barS),lam(T.barT),lam(T.barT),lam(T.barS),lam(T.barS)],
     'Cherry Stairs':lam(T.chp),'Cherry Slab':lam(T.chp),'Cherry Fence':lam(T.chp),'Cherry Leaves':lam(T.cl,{alphaTest:.5}),
-    'Pink Petals':lam(T.pp,{alphaTest:.5,side:THREE.DoubleSide}),'White Concrete':lam(T.wcn),'Dark Oak Slab':lam(T.dpl),'Moss Carpet':lam(T.mcp),'Red Carpet':lam(T.rcp),'Cherry Trapdoor':lam(T.chp),'Pink Tulip':lam(T.tul),'Allium':lam(T.alm),'Pumpkin':lam(T.pum),'Dirt Path':lam(T.dp),'Bamboo':lam(T.bam),'Red Mushroom':lam(T.rmu),'Grass Block':[lam(T.gsd),lam(T.gsd),lam(T.gt),lam(T.dt),lam(T.gsd),lam(T.gsd)],'Cracked Stone Bricks':lam(T.csb),'Smooth Sandstone Stairs':lam(T.ss),'Smooth Sandstone Slab':lam(T.ss),"Jack o'Lantern":[lam(T.pum),lam(T.pum),lam(T.pum),lam(T.pum),lam(T.jl,{emissive:0xffffff,emissiveMap:T.jl,emissiveIntensity:.5}),lam(T.pum)],'Mossy Cobblestone Stairs':lam(T.mc),'Mossy Cobblestone Slab':lam(T.mc),'Coarse Dirt':lam(T.cd),'Poppy':lam(T.pop,{alphaTest:.5,side:THREE.DoubleSide}),'Dandelion':lam(T.dan,{alphaTest:.5,side:THREE.DoubleSide}),'Oxeye Daisy':lam(T.ox,{alphaTest:.5,side:THREE.DoubleSide}),'Short Grass':lam(T.sg,{alphaTest:.5,side:THREE.DoubleSide}),'Melon':lam(T.mel),'Carrots':lam(T.car,{alphaTest:.5,side:THREE.DoubleSide})});
+    'Pink Petals':lam(T.pp,{alphaTest:.5,side:THREE.DoubleSide}),'Lily Pad':lam(T.lil,{alphaTest:.5,side:THREE.DoubleSide}),'Obsidian':lam(T.obs),'White Wool':lam(T.wl),'Oak Fence Gate':lam(T.planks),'Red Concrete':lam(T.rcn),'Brown Mushroom Block':lam(T.bmb),'Lapis Lazuli Block':lam(T.lap),'Amethyst Block':lam(T.ame),'Purple Carpet':lam(T.pcp),'Enchanting Table':[lam(T.ets),lam(T.ets),lam(T.ett),lam(T.obs),lam(T.ets),lam(T.ets)],'White Concrete':lam(T.wcn),'Dark Oak Slab':lam(T.dpl),'Moss Carpet':lam(T.mcp),'Red Carpet':lam(T.rcp),'Cherry Trapdoor':lam(T.chp),'Pink Tulip':lam(T.tul),'Allium':lam(T.alm),'Pumpkin':lam(T.pum),'Dirt Path':lam(T.dp),'Bamboo':lam(T.bam),'Red Mushroom':lam(T.rmu),'Grass Block':[lam(T.gsd),lam(T.gsd),lam(T.gt),lam(T.dt),lam(T.gsd),lam(T.gsd)],'Cracked Stone Bricks':lam(T.csb),'Smooth Sandstone Stairs':lam(T.ss),'Smooth Sandstone Slab':lam(T.ss),"Jack o'Lantern":[lam(T.pum),lam(T.pum),lam(T.pum),lam(T.pum),lam(T.jl,{emissive:0xffffff,emissiveMap:T.jl,emissiveIntensity:.5}),lam(T.pum)],'Mossy Cobblestone Stairs':lam(T.mc),'Mossy Cobblestone Slab':lam(T.mc),'Coarse Dirt':lam(T.cd),'Poppy':lam(T.pop,{alphaTest:.5,side:THREE.DoubleSide}),'Dandelion':lam(T.dan,{alphaTest:.5,side:THREE.DoubleSide}),'Oxeye Daisy':lam(T.ox,{alphaTest:.5,side:THREE.DoubleSide}),'Short Grass':lam(T.sg,{alphaTest:.5,side:THREE.DoubleSide}),'Melon':lam(T.mel),'Carrots':lam(T.car,{alphaTest:.5,side:THREE.DoubleSide})});
   /* shapes: [offset x,y,z, scale x,y,z] */
   const FULL=[[0,0,0,1,1,1]];
   const stP=v=>{const f=v.f||[0,v.z<3?1:-1];return [[0,-.25,0,1,.5,1],[.25*f[0],.25,.25*f[1],f[0]?.5:1,.5,f[1]?.5:1]]};
   const SH={Torch:v=>{const f=v.f||[0,0];return [[.36*f[0],-.2,.36*f[1],.14,.6,.14]]},
     Lantern:v=>[[0,v.h===1?.27:v.h===-1?-.27:-.1,0,.4,.45,.4]],'Flower Pot':()=>[[0,-.28,0,.42,.44,.42]],
-    Wheat:()=>[[0,-.16,0,.78,.8,.78]],Farmland:()=>[[0,-.03,0,1,.94,1]],Water:v=>v.f?[[0,-.47,0,1,.06,1]]:[[0,-.1,0,1,.8,1]],'Oak Trapdoor':()=>[[0,.25,-.25,.84,.5,.5]],'Rose Bush':()=>[[0,-.25,-.25,.64,.5,.4]],Chain:()=>[[0,0,0,.2,1,.2]],'Lightning Rod':()=>[[0,0,0,.14,1,.14]],'Pink Petals':()=>[[0,-.45,0,.92,.1,.92]],'Moss Carpet':()=>[[0,-.47,0,1,.06,1]],'Red Carpet':()=>[[0,-.47,0,1,.06,1]],
+    Wheat:()=>[[0,-.16,0,.78,.8,.78]],Farmland:()=>[[0,-.03,0,1,.94,1]],Water:v=>v.f?[[0,-.47,0,1,.06,1]]:[[0,-.1,0,1,.8,1]],'Oak Trapdoor':()=>[[0,.25,-.25,.84,.5,.5]],'Rose Bush':()=>[[0,-.25,-.25,.64,.5,.4]],Chain:()=>[[0,0,0,.2,1,.2]],'Lightning Rod':()=>[[0,0,0,.14,1,.14]],'Pink Petals':()=>[[0,-.45,0,.92,.1,.92]],'Lily Pad':()=>[[0,-.68,0,.92,.04,.92]],'Purple Carpet':()=>[[0,-.47,0,1,.06,1]],'Enchanting Table':()=>[[0,-.125,0,1,.75,1]],'Moss Carpet':()=>[[0,-.47,0,1,.06,1]],'Red Carpet':()=>[[0,-.47,0,1,.06,1]],
+    'Oak Fence Gate':v=>{const f=v.f||[0,1],zs=f[0]!==0,q=(a,b,c,d,e,g)=>zs?[a,b,c,d,e,g]:[c,b,a,g,e,d];
+      return [q(0,0,-.43,.14,1,.14),q(0,0,.43,.14,1,.14),q(0,-.08,0,.1,.16,.72),q(0,.3,0,.1,.16,.72),q(0,.11,-.14,.1,.62,.1),q(0,.11,.14,.1,.62,.1)]},
     'Cherry Trapdoor':v=>{const f=v.f||[0,-1];return [[.25*f[0],.25,.25*f[1],f[0]?.5:.84,.5,f[1]?.5:.84]]},
     'Pink Tulip':v=>{const f=v.f||[0,-1];return [[.24*f[0],-.2,.24*f[1],f[0]?.46:.62,.6,f[1]?.46:.62]]},
     Allium:v=>{const f=v.f||[0,-1];return [[.24*f[0],-.15,.24*f[1],f[0]?.46:.56,.7,f[1]?.46:.56]]},
@@ -183,7 +200,7 @@ function init3d(id){
     Carrots:()=>[[0,-.22,0,.78,.64,.78]]};
   /* fences and glass panes reach out to the blocks beside them, like in the game */
   const occ=new Map(vox.map(v=>[v.x+','+v.y+','+v.z,v])),nbr=(v,dx,dz)=>occ.get((v.x+dx)+','+v.y+','+(v.z+dz));
-  const isFull=n=>!/Stairs$|Slab$|Fence$|Pane$|Torch|Lantern|Pot$|Wheat|Water|Trapdoor|Rose|Chain|Rod|Leaves|Petals|Carpet|Tulip|Allium|Carrots|Farmland|Poppy|Dandelion|Daisy|Grass|Path|Bamboo|Mushroom$/.test(n);
+  const isFull=n=>!/Stairs$|Slab$|Fence$|Pane$|Torch|Lantern|Pot$|Wheat|Water|Trapdoor|Rose|Chain|Rod|Leaves|Petals|Lily|Table|Carpet|Tulip|Allium|Carrots|Farmland|Poppy|Dandelion|Daisy|Grass|Path|Bamboo|Mushroom$/.test(n);
   const fenceS=v=>{const out=[[0,0,0,.25,1,.25]];
     [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{const n=nbr(v,d[0],d[1]);if(!n||!(/Fence$/.test(n.b)||isFull(n.b)))return;
       [-.03,.34].forEach(y=>out.push([d[0]*.3125,y,d[1]*.3125,d[0]?.375:.125,.1875,d[0]?.125:.375]))});return out};
@@ -202,8 +219,85 @@ function init3d(id){
   });
   /* ground: a chunk of grass-topped dirt, like the game's own terrain */
   const gm=(f,rx,ry)=>new THREE.MeshLambertMaterial({map:mk(f,rx,ry)}),gW=sx+6,gD=sz+6,gY=mn[1]-.51;
-  const chunk=(h,top,side,y)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(gW,h,gD),[gm(side,gD,h),gm(side,gD,h),gm(top,gW,gD),gm(dirtF,gW,gD),gm(side,gW,h),gm(side,gW,h)]);o.position.set(cx,y,cz);sc.add(o)};
+  const chunk=(h,top,side,y)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(gW,h,gD),[gm(side,gD,h),gm(side,gD,h),gm(top,gW,gD),gm(dirtF,gW,gD),gm(side,gW,h),gm(side,gW,h)]);o.position.set(cx,y,cz);o.receiveShadow=true;sc.add(o)};
   chunk(1,grassF,grassSideF,gY-.5);chunk(2,dirtF,dirtF,gY-2);
+  /* Shader-pack look that still reads as the game: pixel clouds, a square sun, a warm light with soft shadows, haze and a glow round every light block.
+     Each part is in its own try, so if a device can't do one, the rest still shows and the old blue backdrop stays behind it. */
+  const NOCAST=n=>/Pane$|Carpet$|Petals$|Pad$|Tulip$|Rose Bush$|Flower Pot$|Torch$|Lantern$|^(Short Grass|Poppy|Dandelion|Oxeye Daisy|Allium|Wheat|Chain|Water|Dirt Path)$/.test(n);
+  const gn=Object.keys(groups);
+  let shDirty=3,glowOp=.5,skyG=null,cm=null,sunG=null,sunC=null,shadowsOn=false;
+  const skyU={zen:{value:new THREE.Color()},mid:{value:new THREE.Color()},hor:{value:new THREE.Color()},glowC:{value:new THREE.Color()},sunDir:{value:new THREE.Vector3(0,1,0)},glowK:{value:.5}};
+  const glowTex=(()=>{try{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);
+    gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.22,'rgba(255,255,255,.6)');gr.addColorStop(.55,'rgba(255,255,255,.16)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)}catch(e){return null}})();
+  try{
+    r.shadowMap.enabled=true;r.shadowMap.type=THREE.PCFSoftShadowMap;r.shadowMap.autoUpdate=false;
+    const SR=Math.hypot(sx+6,sz+6)/2+sy*.35+3,Ld=ext*2.4+30,k=dl.shadow.camera;
+    dl.castShadow=true;dl.shadow.mapSize.set(2048,2048);
+    k.left=-SR;k.right=SR;k.top=SR;k.bottom=-SR;k.near=Math.max(1,Ld-SR*1.6);k.far=Ld+SR*1.6;k.updateProjectionMatrix();
+    dl.shadow.bias=-.0004;dl.shadow.normalBias=.05;
+    meshes.forEach(([m],i)=>{m.castShadow=!NOCAST(gn[i]);m.receiveShadow=true});shadowsOn=true;
+  }catch(e){}
+  try{
+    const sky=new THREE.Mesh(new THREE.SphereGeometry(420,24,16),new THREE.ShaderMaterial({uniforms:skyU,side:THREE.BackSide,depthWrite:false,
+      vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader:'uniform vec3 zen;uniform vec3 mid;uniform vec3 hor;uniform vec3 glowC;uniform vec3 sunDir;uniform float glowK;varying vec3 vD;'+
+        'void main(){vec3 d=normalize(vD);float up=clamp(d.y,0.0,1.0);float below=clamp(-d.y*2.5,0.0,1.0);'+
+        'vec3 c=mix(hor,mid,smoothstep(0.0,0.22,up));c=mix(c,zen,smoothstep(0.18,0.85,up));c=mix(c,mid*0.9,below);'+
+        'float s=max(dot(d,normalize(sunDir)),0.0);c+=glowC*(pow(s,6.0)*0.28*glowK+pow(s,48.0)*0.38*glowK);gl_FragColor=vec4(c,1.0);}'}));
+    sky.renderOrder=-10;sky.frustumCulled=false;
+    const sq=document.createElement('canvas');sq.width=sq.height=16;{const g=sq.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,16,16)}
+    const sqT=new THREE.CanvasTexture(sq);sqT.magFilter=sqT.minFilter=THREE.NearestFilter;sqT.generateMipmaps=false;
+    sunG=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,opacity:.9}));sunG.scale.set(190,190,1);
+    sunC=new THREE.Sprite(new THREE.SpriteMaterial({map:sqT,transparent:true,depthWrite:false,fog:false}));sunC.scale.set(30,30,1);
+    skyG=new THREE.Group();skyG.add(sky);skyG.add(sunG);skyG.add(sunC);sc.add(skyG);
+    /* haze toward the horizon, so the far clouds melt into the sky */
+    const fn=dist*2.1+ext*1.2+10;sc.fog=new THREE.Fog(0xdbe9f5,fn,fn+430);
+    /* a sea of blocky clouds below the island: little slabs lit like the blocks, so the top is bright and the sides are shaded, like the game's own */
+    const hsh=(i,j)=>{let h=(i*374761393+j*668265263)|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967295};
+    const vn=(x,y)=>{const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0,sx_=fx*fx*(3-2*fx),sy_=fy*fy*(3-2*fy);return (hsh(x0,y0)*(1-sx_)+hsh(x0+1,y0)*sx_)*(1-sy_)+(hsh(x0,y0+1)*(1-sx_)+hsh(x0+1,y0+1)*sx_)*sy_};
+    const co=[...id].reduce((h_,c_)=>(h_*31+c_.charCodeAt(0))|0,7),oi=(co&255)-128,oj=((co>>8)&255)-128;
+    const cloudV=(i,j)=>vn((i+oi)*.17,(j+oj)*.17)*.62+vn((i+oi)*.41+9,(j+oj)*.41+4)*.38,CWD=5,CTH=2.5,cells=[];
+    for(let i=-48;i<=48;i++)for(let j=-48;j<=48;j++)if(cloudV(i,j)>.56)cells.push([i,j]);
+    cm=new THREE.MeshLambertMaterial({color:0xffffff,emissive:0xffffff,emissiveIntensity:.18});
+    const cim=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),cm,cells.length);cim.frustumCulled=false;
+    cells.forEach(([i,j],q)=>{d.position.set(cx+i*CWD,gY-16-CTH/2,cz+j*CWD);d.scale.set(CWD,CTH,CWD);d.updateMatrix();cim.setMatrixAt(q,d.matrix)});
+    cim.instanceMatrix.needsUpdate=true;cim.isDecor=true;sc.add(cim);
+  }catch(e){skyG=null}
+  /* a soft glow round every lantern, torch and shroomlight; it grows in with the block */
+  try{
+    const GS={'Lantern':2.6,'Torch':2.1,'Shroomlight':3.2,"Jack o'Lantern":3.2},seen=new Set();
+    meshes.forEach(([m,list],i)=>{const sz_=GS[gn[i]];if(!sz_||!glowTex)return;
+      list.forEach(e=>{if(seen.has(e.v))return;seen.add(e.v);
+        const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xffb860,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,opacity:0}));
+        sp.scale.set(sz_,sz_,1);sp.position.set(e.v.x,e.v.y+(gn[i]==='Torch'?.1:e.v.h===1?-.05:0),e.v.z);sc.add(sp);e.sp=sp})});
+  }catch(e){}
+  const applyEnv=name=>{
+    const E=ENVS[name]||ENVS.day;
+    try{
+      const sd=new THREE.Vector3(E.sun[0],E.sun[1],E.sun[2]).normalize(),Ld=ext*2.4+30;
+      hl.color.set(E.hSky);hl.groundColor.set(E.hGnd);hl.intensity=E.hI;
+      dl.color.set(E.sunCol);dl.intensity=E.sunI;dl.position.set(cx+sd.x*Ld,ty+sd.y*Ld,cz+sd.z*Ld);dl.target.position.set(cx,ty,cz);dl.target.updateMatrixWorld();
+      if(skyG){
+        skyU.zen.value.setRGB(E.zen[0],E.zen[1],E.zen[2]);skyU.mid.value.setRGB(E.mid[0],E.mid[1],E.mid[2]);skyU.hor.value.setRGB(E.hor[0],E.hor[1],E.hor[2]);
+        skyU.glowC.value.setRGB(E.glowC[0],E.glowC[1],E.glowC[2]);skyU.glowK.value=E.glowK;skyU.sunDir.value.copy(sd);
+        sunG.position.copy(sd).multiplyScalar(320);sunC.position.copy(sd).multiplyScalar(320);
+        sunG.material.color.setRGB(E.glowC[0],E.glowC[1],E.glowC[2]);sunC.material.color.setRGB(1,.96,.82);
+        if(sc.fog)sc.fog.color.set(E.fog);
+        cm.color.setRGB(E.cloud[0],E.cloud[1],E.cloud[2]);cm.emissive.setRGB(E.cloud[0],E.cloud[1],E.cloud[2]);
+      }
+    }catch(e){}
+    glowOp=E.glow;
+    meshes.forEach(([m,list])=>list.forEach(e=>{e.drawn=false}));busy=true;shDirty=3;
+  };
+  const pickEnv=()=>{try{const t=document.documentElement.getAttribute('data-theme');return t==='dark'||(t!=='light'&&typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dusk':'day'}catch(e){return 'day'}};
+  let offEnv=()=>{};
+  try{
+    const onTheme=()=>applyEnv(pickEnv()),mo=new MutationObserver(onTheme),mq=typeof matchMedia==='function'?matchMedia('(prefers-color-scheme: dark)'):null;
+    mo.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+    if(mq){mq.addEventListener?mq.addEventListener('change',onTheme):mq.addListener&&mq.addListener(onTheme)}
+    offEnv=()=>{mo.disconnect();if(mq){mq.removeEventListener?mq.removeEventListener('change',onTheme):mq.removeListener&&mq.removeListener(onTheme)}};
+  }catch(e){}
   /* The slider only sets a target step. Every block then eases toward its target a little each frame (grow in, shrink out, brighten or dim),
      so scrubbing is smooth, nothing is rewritten in one burst, and no objects are created per frame. */
   const calm=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -232,6 +326,7 @@ function init3d(id){
         d.position.set(v.x+pt[0],v.y+pt[1],v.z+pt[2]);
         d.scale.set(pt[3]*a,pt[4]*a,pt[5]*a);d.updateMatrix();m.setMatrixAt(i,d.matrix);
         tint.copy(e.c).multiplyScalar(.82+.18*h);m.setColorAt(i,tint);
+        if(e.sp)e.sp.material.opacity=glowOp*e.a*(.8+.2*h);
       });
       if(touched){m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true}
     });
@@ -287,13 +382,16 @@ function init3d(id){
   const box=cv.parentNode;
   const fit=()=>{const w=box.clientWidth||600,h=Math.max(300,Math.round(w*ratio));r.setSize(w,h,false);cv.style.height=h+'px';cam.aspect=w/h;cam.updateProjectionMatrix()};
   const ro=new ResizeObserver(fit);ro.observe(box);fit();
-  retarget(N-1,true);label(N-1);
-  v3={r,ro,raf:0};
+  applyEnv(pickEnv());retarget(N-1,true);label(N-1);
+  v3={r,ro,raf:0,off:offEnv};
   (function loop(){
     v3&&(v3.raf=requestAnimationFrame(loop));
     const now=performance.now(),dt=Math.min(.05,(now-tPrev)/1000);tPrev=now;
     if(want!==cur)retarget(want);
     ease(dt);easeBox(dt);
-    if(ctl)ctl.update();r.render(sc,cam);
+    if(ctl)ctl.update();
+    if(skyG)skyG.position.copy(cam.position);
+    if(busy)shDirty=3;if(shDirty>0){r.shadowMap.needsUpdate=true;shDirty--}
+    r.render(sc,cam);
   })();
 }
